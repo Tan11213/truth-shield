@@ -1,6 +1,87 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1,
+      delayChildren: 0.2
+    }
+  }
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 50 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: "spring",
+      stiffness: 100,
+      damping: 12,
+      duration: 0.4
+    }
+  }
+};
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 50 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: "spring",
+      stiffness: 100,
+      damping: 12,
+      duration: 0.5
+    }
+  },
+  hover: {
+    y: -15,
+    scale: 1.02,
+    boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
+    transition: {
+      type: "spring",
+      stiffness: 400,
+      damping: 10
+    }
+  },
+  tap: {
+    y: -5,
+    scale: 0.98,
+    boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
+    transition: {
+      type: "spring",
+      stiffness: 400,
+      damping: 15
+    }
+  }
+};
+
+const iconVariants = {
+  hidden: { scale: 0, rotate: -180 },
+  visible: {
+    scale: 1,
+    rotate: 0,
+    transition: {
+      type: "spring",
+      stiffness: 200,
+      damping: 10
+    }
+  },
+  hover: {
+    scale: 1.15,
+    rotate: 5,
+    transition: {
+      type: "spring",
+      stiffness: 400,
+      damping: 10
+    }
+  }
+};
+
 const features = [
   {
     title: 'Multi-source Verification',
@@ -66,69 +147,159 @@ const features = [
 
 const Features: React.FC = () => {
   return (
-    <section className="py-12 md:py-20 bg-white">
+    <motion.section 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.6 }}
+      className="py-12 md:py-20 bg-white"
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16">
-          <motion.h2 
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
+        <motion.div 
+          className="text-center mb-16"
+          variants={containerVariants}
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: "-100px" }}
+        >
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            whileInView={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.5, type: "spring" }}
             viewport={{ once: true }}
-            transition={{ duration: 0.5 }}
+            className="inline-block bg-primary-50 rounded-full px-3 py-1 text-sm font-medium text-primary-600 mb-4"
+          >
+            Advanced Features
+          </motion.div>
+          <motion.h2 
+            variants={itemVariants}
             className="text-3xl md:text-4xl font-bold text-gray-900 mb-4"
           >
-            How TruthShield <span className="text-primary-600">Safeguards</span> the Truth
+            How TruthShield <motion.span 
+              className="text-primary-600"
+              animate={{ 
+                color: ["#4F46E5", "#6366F1", "#4F46E5"]
+              }}
+              transition={{ duration: 3, repeat: Infinity }}
+            >Safeguards</motion.span> the Truth
           </motion.h2>
           <motion.p 
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5, delay: 0.1 }}
+            variants={itemVariants}
             className="max-w-2xl mx-auto text-xl text-gray-600"
           >
             Our platform combines advanced technology with regional expertise to verify information during critical times.
           </motion.p>
-        </div>
+        </motion.div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <motion.div 
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
+          variants={containerVariants}
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: "-50px" }}
+        >
           {features.map((feature, index) => (
             <motion.div 
               key={index}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5, delay: feature.delay }}
-              className="card hover:border-primary-100 flex flex-col h-full"
+              variants={cardVariants}
+              whileHover="hover"
+              whileTap="tap"
+              className="card hover:border-primary-100 flex flex-col h-full bg-white rounded-xl p-6 shadow-sm border border-gray-100 transition-all duration-200"
             >
-              <div className="h-12 w-12 bg-primary-100 rounded-lg flex items-center justify-center text-primary-600 mb-5">
+              <motion.div 
+                className="h-12 w-12 bg-primary-100 rounded-lg flex items-center justify-center text-primary-600 mb-5"
+                variants={iconVariants}
+                whileHover="hover"
+              >
                 {feature.icon}
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-3">{feature.title}</h3>
-              <p className="text-gray-600 flex-grow">{feature.description}</p>
+              </motion.div>
+              <motion.h3 
+                className="text-xl font-bold text-gray-900 mb-3"
+                whileHover={{ color: "#4F46E5", x: 3 }}
+                transition={{ duration: 0.2 }}
+              >
+                {feature.title}
+              </motion.h3>
+              <motion.p 
+                className="text-gray-600 flex-grow"
+                initial={{ opacity: 0.8 }}
+                whileHover={{ opacity: 1 }}
+              >
+                {feature.description}
+              </motion.p>
+              <motion.div 
+                className="mt-4 pt-4 border-t border-gray-100"
+                initial={{ opacity: 0 }}
+                whileHover={{ opacity: 1 }}
+              >
+                <motion.span 
+                  className="text-sm text-primary-600 font-medium flex items-center"
+                  whileHover={{ x: 3 }}
+                >
+                  Learn more
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </motion.span>
+              </motion.div>
             </motion.div>
           ))}
-        </div>
+        </motion.div>
         
-        <div className="mt-16 text-center">
+        <motion.div 
+          className="mt-16 text-center"
+          initial={{ opacity: 0, y: 50 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-50px" }}
+          transition={{ 
+            duration: 0.6, 
+            type: "spring",
+            stiffness: 100,
+            damping: 12
+          }}
+        >
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5, delay: 0.7 }}
+            whileHover={{ y: -5 }}
+            transition={{ type: "spring", stiffness: 400 }}
           >
-            <span className="inline-flex rounded-full bg-primary-100 px-4 py-1 text-sm font-semibold text-primary-600 mb-4">
+            <motion.span 
+              className="inline-flex rounded-full bg-primary-100 px-4 py-1 text-sm font-semibold text-primary-600 mb-4"
+              whileHover={{ scale: 1.05, backgroundColor: "#e0e7ff" }}
+            >
               Trusted Methodology
-            </span>
-            <h3 className="text-2xl font-bold text-gray-900 mb-4">Transparency is our foundation</h3>
-            <p className="max-w-2xl mx-auto text-gray-600 mb-8">
+            </motion.span>
+            <motion.h3 
+              className="text-2xl font-bold text-gray-900 mb-4"
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.3, delay: 0.2 }}
+            >
+              Transparency is our foundation
+            </motion.h3>
+            <motion.p 
+              className="max-w-2xl mx-auto text-gray-600 mb-8"
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.3, delay: 0.3 }}
+            >
               Our fact-checking process is completely transparent, allowing you to see exactly how we verify information and the sources we use.
-            </p>
-            <button className="btn-primary">
+            </motion.p>
+            <motion.button 
+              className="btn-primary"
+              whileHover={{ 
+                scale: 1.05, 
+                boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)" 
+              }}
+              whileTap={{ scale: 0.98 }}
+              transition={{ type: "spring", stiffness: 400, damping: 10 }}
+            >
               Learn about our methodology
-            </button>
+            </motion.button>
           </motion.div>
-        </div>
+        </motion.div>
       </div>
-    </section>
+    </motion.section>
   );
 };
 

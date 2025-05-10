@@ -1,16 +1,12 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 
 const FactCheckDemo: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'text' | 'image' | 'url'>('text');
   const [inputValue, setInputValue] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [result, setResult] = useState<null | {
-    verdict: 'true' | 'false' | 'partial';
-    claim: string;
-    explanation: string;
-    sources: string[];
-  }>(null);
+  const navigate = useNavigate();
   
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,16 +14,18 @@ const FactCheckDemo: React.FC = () => {
     
     setIsProcessing(true);
     
-    // Simulate processing time
+    // Instead of processing here, we'll save the input to session storage 
+    // and redirect to the main verify page
+    sessionStorage.setItem('verifyData', JSON.stringify({
+      type: activeTab,
+      content: inputValue,
+      timestamp: new Date().toISOString()
+    }));
+    
+    // Short delay to show the loading state before redirecting
     setTimeout(() => {
-      setIsProcessing(false);
-      setResult({
-        verdict: 'partial',
-        claim: "Indian Air Force deployed additional squadrons to the border region this week.",
-        explanation: "While there has been an increase in air force activity in the region, official sources confirm it is part of scheduled military exercises planned months ago, not a direct response to recent tensions. Commercial satellite imagery shows increased activity at two air bases, but not at the scale claimed in some reports.",
-        sources: ['Military Press Release', 'Reuters', 'Satellite Imagery Analysis']
-      });
-    }, 2500);
+      navigate('/verify');
+    }, 500);
   };
   
   const getVerdictColor = (verdict: 'true' | 'false' | 'partial') => {
@@ -184,81 +182,16 @@ const FactCheckDemo: React.FC = () => {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  Processing...
+                  Redirecting...
                 </>
               ) : (
-                'Verify Now'
+                'Full Verification'
               )}
             </button>
+            <p className="text-center text-xs text-gray-500 mt-2">
+              You'll be redirected to our comprehensive verification tool
+            </p>
           </form>
-          
-          {/* Results section */}
-          {result && (
-            <motion.div 
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              transition={{ duration: 0.3 }}
-              className="mt-8 pt-6 border-t border-gray-200"
-            >
-              <div className="mb-4">
-                <div className="flex items-center mb-3">
-                  <div className={`h-8 w-8 ${getVerdictColor(result.verdict)} rounded-full flex items-center justify-center mr-2`}>
-                    {result.verdict === 'true' && (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                    {result.verdict === 'false' && (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    )}
-                    {result.verdict === 'partial' && (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                      </svg>
-                    )}
-                  </div>
-                  <h3 className={`text-lg font-bold ${getVerdictTextColor(result.verdict)}`}>
-                    {getVerdictText(result.verdict)}
-                  </h3>
-                </div>
-                
-                <div className="mb-4 pb-4 border-b border-gray-100">
-                  <h4 className="text-sm font-medium text-gray-700 mb-1">Claim:</h4>
-                  <p className="text-base text-gray-900">{result.claim}</p>
-                </div>
-                
-                <div className="mb-4">
-                  <h4 className="text-sm font-medium text-gray-700 mb-1">Analysis:</h4>
-                  <p className="text-base text-gray-800">{result.explanation}</p>
-                </div>
-                
-                <div className="bg-gray-50 p-3 rounded-lg">
-                  <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Sources:</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {result.sources.map((source, index) => (
-                      <div key={index} className="bg-white px-2 py-1 rounded border border-gray-200 text-xs text-gray-700">
-                        {source}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              
-              <div className="flex justify-between mt-4">
-                <button className="text-sm text-primary-600 hover:text-primary-700 flex items-center">
-                  See detailed report
-                  <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                  </svg>
-                </button>
-                <button className="text-sm text-gray-600 hover:text-gray-800">
-                  Share result
-                </button>
-              </div>
-            </motion.div>
-          )}
         </motion.div>
       </div>
     </section>

@@ -1,16 +1,15 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import SimpleHome from './pages/SimpleHome';
-import SimpleVerify from './pages/SimpleVerify';
+import HomePage from './pages/HomePage';
+import VerifyPage from './pages/VerifyPage';
 
-// Using simplified components without animations
-// This helps us run the app despite the framer-motion compatibility issues
+// Restored animated components
 const App: React.FC = () => {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<SimpleHome />} />
-        <Route path="/verify" element={<SimpleVerify />} />
+        <Route path="/" element={<HomePage />} />
+        <Route path="/verify" element={<VerifyPage />} />
         {/* Add more routes as needed */}
       </Routes>
     </Router>
