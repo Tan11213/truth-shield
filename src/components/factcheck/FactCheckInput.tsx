@@ -49,6 +49,7 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
   const [extractedText, setExtractedText] = useState('');
   const [showExtractedText, setShowExtractedText] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [showPlatformIndicator, setShowPlatformIndicator] = useState(false);
   const [detectedPlatform, setDetectedPlatform] = useState<string | null>(null);
   const [showImageError, setShowImageError] = useState(false);
@@ -57,6 +58,7 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [claimText, setClaimText] = useState('');
   const [processedFileId, setProcessedFileId] = useState<string | null>(null);
+  const [textareaVisible, setTextareaVisible] = useState(false);
   
   // When a file is added, process it with OCR only if it's a new file
   useEffect(() => {
@@ -72,30 +74,30 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
     }
   }, [file, activeTab]);
   
-  // Modify the useEffect that handles OCR completion
+  // Make sure the textarea is displayed whenever we switch to the image tab and have text
   useEffect(() => {
-    // Check if OCR has just completed (transition from processing to not processing)
-    // and we have extracted text
-    if (isOcrProcessing === false && file && extractedText) {
-      // Ensure the text area is visible
-      setShowExtractedText(true);
-      
-      // Attempt to focus the text area (helps with visibility)
-      setTimeout(() => {
-        const textArea = document.getElementById('extracted-text') as HTMLTextAreaElement;
-        if (textArea) {
-          // Ensure it's visible in the DOM
-          textArea.style.display = 'block';
-          
-          // Scroll it into view if needed
-          textArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          
-          // Log success for debugging
-          console.log('OCR processing completed, text area ensured visible');
-        }
-      }, 200);
+    if (activeTab === 'image' && file) {
+      setTextareaVisible(true);
     }
-  }, [isOcrProcessing, file, extractedText]);
+  }, [activeTab, file]);
+  
+  // Simpler effect to ensure textarea is visible after OCR completes
+  useEffect(() => {
+    if (!isOcrProcessing && extractedText && file) {
+      setTextareaVisible(true);
+      
+      // After OCR completes, try to focus the textarea
+      setTimeout(() => {
+        if (textareaRef.current) {
+          try {
+            textareaRef.current.focus();
+          } catch (e) {
+            console.log('Could not focus textarea', e);
+          }
+        }
+      }, 300);
+    }
+  }, [isOcrProcessing, extractedText, file]);
   
   // Detect social media platform from URL
   useEffect(() => {
@@ -133,7 +135,8 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
       setIsOcrProcessing(true);
       setShowImageError(false);
       setExtractedText('');
-      setShowExtractedText(true);
+      // Important: don't hide textarea when starting OCR process
+      setTextareaVisible(true);
       // Reset detected platform for each new image
       setDetectedPlatform(null);
       setShowPlatformIndicator(false);
@@ -202,7 +205,8 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
       setImageError(errorMessage + "\n\nYou can try using a clearer image or manually enter the text.");
       setShowImageError(true);
       setExtractedText('');
-      setShowExtractedText(true);
+      // Keep textarea visible even on error
+      setTextareaVisible(true);
     } finally {
       setIsOcrProcessing(false);
       setShowUploading(false);
@@ -323,7 +327,20 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
   const TabButton = ({ type, label, icon: Icon }: { type: 'text' | 'image' | 'url', label: string, icon: React.ComponentType }) => (
     <MotionButton 
       type="button"
-      onClick={() => setActiveTab(type)}
+      onClick={() => {
+        setActiveTab(type);
+        
+        // If changing to image tab and we have a file with extracted text,
+        // ensure the textarea is visible after a short delay
+        if (type === 'image' && file && extractedText) {
+          setTimeout(() => {
+            setTextareaVisible(true);
+            if (textareaRef.current) {
+              textareaRef.current.focus();
+            }
+          }, 100);
+        }
+      }}
       className={`flex-1 py-3 flex items-center justify-center space-x-2 transition-colors ${
         activeTab === type 
           ? 'text-primary-600 border-b-2 border-primary-500 font-medium' 
@@ -583,14 +600,9 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
                 </motion.div>
               )}
               
-              {/* Always show the textarea whenever we have a file, even during processing */}
+              {/* Always render the textarea container when we have a file, control visibility with state */}
               {file && (
-                <motion.div 
-                  className="mt-4"
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3 }}
-                >
+                <div className="mt-4">
                   <div className="flex justify-between items-center mb-2">
                     <label htmlFor="extracted-text" className="block text-sm font-medium text-gray-700">
                       {imageError 
@@ -604,29 +616,31 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
                     </div>
                   </div>
                   
-                  {/* Force textarea visibility with inline style */}
-                  <MotionTextArea
+                  {/* No animation on the textarea element itself */}
+                  <textarea
                     id="extracted-text"
+                    ref={textareaRef}
                     rows={6}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                     placeholder={isOcrProcessing ? "Extracting text..." : "Extracted text will appear here. You can edit it before verification."}
                     value={extractedText}
                     onChange={(e) => {
-                      // Simple direct update without additional processing to prevent editing issues
                       setExtractedText(e.target.value);
                     }}
-                    variants={itemVariants}
-                    whileFocus={{ scale: 1.01, boxShadow: "0 0 0 3px rgba(59, 130, 246, 0.1)" }}
                     disabled={isOcrProcessing}
-                    style={{ display: 'block' }} // Force display
-                  ></MotionTextArea>
+                    style={{
+                      display: textareaVisible ? 'block' : 'none',
+                      minHeight: '150px',
+                      resize: 'vertical',
+                    }}
+                  />
                   
                   {process.env.NODE_ENV !== 'production' && (
                     <div className="text-xs text-gray-400 mt-1">
-                      Text length: {extractedText.length} chars | Processing: {isOcrProcessing ? 'Yes' : 'No'}
+                      Text length: {extractedText.length} chars | Processing: {isOcrProcessing ? 'Yes' : 'No'} | Visible: {textareaVisible ? 'Yes' : 'No'}
                     </div>
                   )}
-                </motion.div>
+                </div>
               )}
             </div>
             

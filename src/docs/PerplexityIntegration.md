@@ -74,7 +74,7 @@ export const verifyFactsWithPerplexity = async (text: string): Promise<FactCheck
   try {
     // Create prompt for fact-checking
     const prompt = `
-      As a fact-checker for the India-Pakistan conflict, analyze this claim:
+      As a fact-checker, analyze this claim:
       "${text}"
       
       Provide a detailed fact-check with:
@@ -97,7 +97,7 @@ export const verifyFactsWithPerplexity = async (text: string): Promise<FactCheck
     const response = await perplexityClient.post('', {
       model: MODEL,
       messages: [
-        { role: 'system', content: 'You are an expert fact-checker for the India-Pakistan conflict. Provide accurate, unbiased analysis with reliable sources.' },
+        { role: 'system', content: 'You are an expert fact-checker. Provide accurate, unbiased analysis with reliable sources.' },
         { role: 'user', content: prompt }
       ],
       max_tokens: 1000

@@ -1,6 +1,5 @@
 import { 
   verifyFactsWithPerplexity, 
-  analyzeImageWithPerplexity, 
   analyzeWebContentWithPerplexity, 
   enhancedFactCheck,
   FactCheckResult as PerplexityFactCheckResult 
@@ -93,7 +92,10 @@ export const checkFact = async (claim: string, type: 'text' | 'image' | 'url' = 
       logger.info(`Fact checking ${type} content directly with Perplexity.`, { type });
       switch (type) {
         case 'image':
-          perplexityApiResult = await analyzeImageWithPerplexity(claim);
+          // Use enhancedFactCheck for image content after OCR extraction
+          // Image has already been processed with OCR, so treat the claim as text
+          logger.info('Using enhancedFactCheck for OCR-processed image text.', { contentLength: claim.length });
+          perplexityApiResult = await enhancedFactCheck(claim);
           break;
         case 'url':
           perplexityApiResult = await analyzeWebContentWithPerplexity(claim);

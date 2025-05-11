@@ -9,7 +9,7 @@ const SimpleHome: React.FC = () => {
           <div className="text-center">
             <h1 className="text-4xl md:text-5xl font-bold mb-6">TruthShield</h1>
             <p className="text-xl mb-8 max-w-2xl mx-auto">
-              A fact-checking platform focused on verifying information during the India-Pakistan conflict.
+              A fact-checking platform focused on verifying information and combating misinformation.
             </p>
             <button className="bg-white text-primary-700 px-6 py-3 rounded-lg font-medium hover:bg-gray-100 transition-colors">
               Verify a Claim
@@ -47,7 +47,7 @@ const SimpleHome: React.FC = () => {
                 </svg>
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-3">Real-time Analysis</h3>
-              <p className="text-gray-600">Get instant verification results for text claims, images, and videos circulating during the conflict, with clear indications of accuracy.</p>
+              <p className="text-gray-600">Get instant verification results for text claims, images, and videos, with clear indications of accuracy.</p>
             </div>
 
             <div className="bg-white p-6 rounded-xl shadow-md">
@@ -56,8 +56,8 @@ const SimpleHome: React.FC = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Cultural Context</h3>
-              <p className="text-gray-600">Our platform accounts for the nuanced cultural and historical context of the India-Pakistan region, providing culturally sensitive fact-checks.</p>
+              <h3 className="text-xl font-bold text-gray-900 mb-3">Contextual Understanding</h3>
+              <p className="text-gray-600">Our platform accounts for cultural and historical context, providing nuanced fact-checks that consider complex regional factors.</p>
             </div>
           </div>
         </div>

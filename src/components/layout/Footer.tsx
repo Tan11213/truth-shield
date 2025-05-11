@@ -71,7 +71,7 @@ const Footer: React.FC = () => {
               <span className="ml-2 text-xl font-bold text-primary-800 group-hover:text-primary-900 transition-colors duration-300">TruthShield</span>
             </Link>
             <p className="mt-4 text-gray-500 text-sm leading-relaxed">
-              Reliable fact-checking during the India-Pakistan conflict, helping citizens navigate complex information.
+              Reliable fact-checking to help citizens navigate complex information and combat misinformation.
             </p>
             <motion.div className="mt-6 flex space-x-4">
               {socialLinks.map((link, index) => (

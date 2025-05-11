@@ -78,12 +78,24 @@ export async function verifyFactsWithPerplexity(claim: string): Promise<FactChec
     if (!PERPLEXITY_API_KEY) {
       throw new Error('Perplexity API key is missing. Please check your environment variables.');
     }
-    const requestPayload = {
-      model: PERPLEXITY_MODEL,
-      messages: [
-        {
-          role: 'system',
-          content: `You are a precise, thorough fact-checking AI assistant with access to the latest information.
+    
+    // Use a simpler, more direct prompt for short claims
+    const isShortClaim = claim.trim().length < 100;
+    
+    const systemPrompt = isShortClaim 
+      ? `You are a precise, fact-checking AI assistant with access to the latest information.
+         For short, direct claims, provide:
+         1. A clear TRUE, FALSE, or PARTIALLY TRUE verdict
+         2. A brief but informative explanation with factual context
+         3. Numbered citations [1], [2] to reliable sources including official statements, news, and verified social media posts
+         
+         Format your response as:
+         [VERDICT] - Single line with your judgment
+         [EXPLANATION] - 2-3 paragraphs with citations [1], [2]
+         [SOURCES] - Numbered list matching citations, include diverse source types (news, social media, official sources)
+         
+         Be factual, balanced, and precise.`
+      : `You are a precise, thorough fact-checking AI assistant with access to the latest information.
 
 When analyzing claims:
 1. Evaluate each specific point for accuracy, providing a clear verdict (TRUE, FALSE, PARTIALLY TRUE).
@@ -92,23 +104,35 @@ When analyzing claims:
 4. Include a clear "SOURCES:" section at the end with a numbered list matching your in-text citations.
 5. Format each source as: NUMBER. TITLE - URL
    Example: 1. NASA Climate Data - https://climate.nasa.gov/evidence/
-6. Use a diverse range of sources including news articles, academic publications, YouTube videos, social media statements, government data, and other reliable sources. Don't limit yourself only to news articles.
+6. Use a diverse range of sources including news articles, academic publications, YouTube videos, social media statements (X/Twitter, Facebook, etc.), government data, and other reliable sources. Don't limit yourself only to news articles.
 
 Your response MUST follow this structure:
 [VERDICT] - A clear overall judgment.
 [EXPLANATION] - Detailed analysis with numbered citations [1], [2].
 [SOURCES] - Numbered list matching your citations.
           
-Keep your analysis factual, balanced, and comprehensive. Cite primary sources whenever possible.`
+Keep your analysis factual, balanced, and comprehensive. Cite primary sources whenever possible.`;
+
+    const userPrompt = isShortClaim
+      ? `Verify this claim: "${claim}"`
+      : `Please fact-check the following information: "${claim}"`;
+      
+    const requestPayload = {
+      model: PERPLEXITY_MODEL,
+      messages: [
+        {
+          role: 'system',
+          content: systemPrompt
         },
         {
           role: 'user',
-          content: `Please fact-check the following information: "${claim}"`
+          content: userPrompt
         }
       ],
-      max_tokens: 1500, // Increased for more comprehensive responses
+      max_tokens: isShortClaim ? 1000 : 1500, // Use fewer tokens for short claims
       temperature: 0.1
     };
+    
     logger.debug('Outgoing Perplexity API request payload (verifyFacts):', requestPayload);
     const response = await axios.post<PerplexityResponse>(
       PERPLEXITY_API_URL,
@@ -139,57 +163,11 @@ Keep your analysis factual, balanced, and comprehensive. Cite primary sources wh
 }
 
 /**
- * Analyze an image URL using Perplexity API
+ * Note: The analyzeImageWithPerplexity function has been removed.
+ * Images are now processed using Gemini for OCR extraction first,
+ * and then the extracted text is analyzed with enhancedFactCheck.
+ * See ocr.ts and factCheck.ts for the updated implementation.
  */
-export async function analyzeImageWithPerplexity(imageUrl: string): Promise<FactCheckResult> {
-  try {
-    if (!PERPLEXITY_API_KEY) {
-      throw new Error('Perplexity API key is missing');
-    }
-    const requestPayload = {
-      model: PERPLEXITY_MODEL,
-      messages: [
-        {
-          role: 'system',
-          content: `You are a neutral, fact-checking AI assistant specializing in analyzing images. 
-            Analyze the content of the image from the provided URL.
-            Check for signs of manipulation, misinformation, or misleading context.
-            Identify the source and context of the image when possible.
-            Structure your response as: 
-            [ANALYSIS], [POTENTIAL MISINFORMATION INDICATORS], [SOURCES if available], [CONTEXT]`
-        },
-        {
-          role: 'user',
-          content: `Please analyze this image and verify its authenticity: ${imageUrl}`
-        }
-      ],
-      max_tokens: 1024,
-      temperature: 0.1
-    };
-    logger.debug('Outgoing Perplexity API request payload (analyzeImage):', requestPayload);
-    const response = await axios.post<PerplexityResponse>(
-      PERPLEXITY_API_URL,
-      requestPayload,
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${PERPLEXITY_API_KEY}`
-        }
-      }
-    );
-    return parseFactCheckResponse(response.data);
-  } catch (error) {
-    console.error("Error analyzing image with Perplexity:", error);
-    if (axios.isAxiosError(error)) {
-      if (error.response?.status === 401) {
-        throw new Error("Authentication failed. Please check your API key.");
-      } else if (error.response) {
-        throw new Error(`API error: ${error.response.status} ${error.response.data?.message || ''}`);
-      }
-    }
-    throw new Error("Failed to analyze image. Please try again later.");
-  }
-}
 
 /**
  * Analyze a web page content using Perplexity API
@@ -208,15 +186,29 @@ export async function analyzeWebContentWithPerplexity(url: string): Promise<Fact
             Analyze the content of the provided URL.
             Identify key claims and verify them with multiple sources.
             Check for biased framing, misinformation, or misleading content.
+            
+            When verifying information, use a diverse range of sources including:
+            - Official government statements and documents
+            - Major news publications
+            - Social media (X/Twitter, YouTube, etc.) from verified accounts
+            - Academic and research publications
+            - Expert analyses and official statements
+            - Primary source materials whenever available
+            
             Structure your response as: 
-            [SUMMARY], [KEY CLAIMS ANALYSIS], [CREDIBILITY ASSESSMENT], [SOURCES]`
+            [SUMMARY] - Brief overview of the content
+            [KEY CLAIMS ANALYSIS] - Assessment of major claims with specific verdicts (TRUE/FALSE/PARTIALLY TRUE)
+            [CREDIBILITY ASSESSMENT] - Evaluation of the overall reliability
+            [SOURCES] - Numbered list with diverse source types and direct URLs
+            
+            For each source, provide a clear citation format with title and URL.`
         },
         {
           role: 'user',
           content: `Please analyze and fact-check the content at this URL: ${url}`
         }
       ],
-      max_tokens: 1024,
+      max_tokens: 1500,
       temperature: 0.1
     };
     logger.debug('Outgoing Perplexity API request payload (analyzeWeb):', requestPayload);
@@ -306,8 +298,12 @@ function parseFactCheckResponse(apiResponse: PerplexityResponse): FactCheckResul
     // Extract sources with URLs - improved for both numbered lists and inline URLs
     const sources: { title: string, url: string }[] = [];
     
-    // Pattern for numbered sources like "1. Title - URL" or "[1] Title - URL"
-    const numberedSourceRegex = /(?:^|\n)\s*(?:\[?(\d+)\]?\.?\s+)([^-\n]+)(?:-\s*)((?:https?:\/\/)[a-zA-Z0-9][-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*))/gm;
+    // Enhanced pattern for numbered sources like "1. Title - URL" or "[1] Title - URL"
+    // Now better handles social media URLs including X/Twitter, YouTube, etc.
+    const numberedSourceRegex = /(?:^|\n)\s*(?:\[?(\d+)\]?\.?\s+)([^-\n]+)(?:-\s*)((?:https?:\/\/)[a-zA-Z0-9][-a-zA-Z0-9@:%._\+~#=]{0,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*))/gm;
+    
+    // URLs for various social media platforms
+    const socialMediaUrlRegex = /(?:https?:\/\/(?:www\.)?(?:twitter\.com|x\.com|youtube\.com|youtu\.be|facebook\.com|fb\.com|instagram\.com|linkedin\.com)\/[^\s]+)/gi;
     
     // Extract numbered sources from the sources section
     let numberedMatch;
@@ -322,35 +318,65 @@ function parseFactCheckResponse(apiResponse: PerplexityResponse): FactCheckResul
       });
     }
     
-    // If no numbered sources were found in the sources section, fall back to general URL extraction
+    // If no sources found with the standard format, try to extract any URLs including social media
     if (sources.length === 0) {
-      // Extract all URLs from the content
-      const urlRegex = /(?:https?:\/\/)[a-zA-Z0-9][-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*)/g;
-      const urls = Array.from(new Set(content.match(urlRegex) || [])); // Use Set to remove duplicates
-      
-      // For each URL, try to find a relevant title
-      for (const url of urls) {
-        // Look for text around the URL
-        const surroundingText = content.substring(
-          Math.max(0, content.indexOf(url) - 100),
-          content.indexOf(url) + url.length + 20
-        );
+      let socialMatch;
+      let socialSourceCount = 1;
+      while ((socialMatch = socialMediaUrlRegex.exec(content))) {
+        const url = socialMatch[0];
+        let title = `[${socialSourceCount}] Social Media Source`;
         
-        // Check for patterns like "[1] Title" or "Title:" before the URL
-        let titleMatch = surroundingText.match(/\[(\d+)\]\s+([^:]*?)(?=\s*-\s*https?:\/\/)/i) || 
-                        surroundingText.match(/([^:\n]{5,50})(?=\s*:\s*https?:\/\/)/i);
-        
-        // If no match, extract domain from URL as fallback title
-        let title;
-        if (titleMatch && titleMatch[1]) {
-          title = titleMatch[1].trim();
-        } else {
-          // Extract domain name from URL
-          const domainMatch = url.match(/https?:\/\/(?:www\.)?([^\/]+)/i);
-          title = domainMatch ? domainMatch[1] : `Source for ${url}`;
+        // Try to determine the platform
+        if (url.includes('twitter.com') || url.includes('x.com')) {
+          title = `[${socialSourceCount}] X/Twitter Post`;
+        } else if (url.includes('youtube.com') || url.includes('youtu.be')) {
+          title = `[${socialSourceCount}] YouTube Video`;
+        } else if (url.includes('facebook.com') || url.includes('fb.com')) {
+          title = `[${socialSourceCount}] Facebook Post`;
+        } else if (url.includes('instagram.com')) {
+          title = `[${socialSourceCount}] Instagram Post`;
         }
         
-        sources.push({ title, url });
+        sources.push({
+          title,
+          url
+        });
+        
+        socialSourceCount++;
+      }
+      
+      // If still no sources found, fall back to general URL extraction
+      if (sources.length === 0) {
+        // Extract all URLs from the content
+        const urlRegex = /(?:https?:\/\/)[a-zA-Z0-9][-a-zA-Z0-9@:%._\+~#=]{0,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*)/g;
+        const urls = Array.from(new Set(content.match(urlRegex) || [])); // Use Set to remove duplicates
+        
+        // For each URL, try to find a relevant title
+        let urlSourceCount = 1;
+        for (const url of urls) {
+          // Look for text around the URL
+          const surroundingText = content.substring(
+            Math.max(0, content.indexOf(url) - 100),
+            content.indexOf(url) + url.length + 20
+          );
+          
+          // Check for patterns like "[1] Title" or "Title:" before the URL
+          let titleMatch = surroundingText.match(/\[(\d+)\]\s+([^:]*?)(?=\s*-\s*https?:\/\/)/i) || 
+                          surroundingText.match(/([^:\n]{5,50})(?=\s*:\s*https?:\/\/)/i);
+          
+          // If no match, extract domain from URL as fallback title
+          let title;
+          if (titleMatch && titleMatch[1]) {
+            title = `[${urlSourceCount}] ${titleMatch[1].trim()}`;
+          } else {
+            // Extract domain name from URL
+            const domainMatch = url.match(/https?:\/\/(?:www\.)?([^\/]+)/i);
+            title = `[${urlSourceCount}] ${domainMatch ? domainMatch[1] : 'Source'}`;
+          }
+          
+          sources.push({ title, url });
+          urlSourceCount++;
+        }
       }
     }
     
@@ -516,7 +542,15 @@ export async function preprocessWithAI(content: string): Promise<{
  */
 export async function enhancedFactCheck(content: string): Promise<FactCheckResult> {
   try {
-    logger.info('Starting enhanced fact check with AI preprocessing for content:', content.substring(0, 100));
+    logger.info('Starting enhanced fact check for content:', content.substring(0, 100));
+    
+    // Short claims (under 100 chars) should bypass the complex preprocessing
+    // This prevents Gemini from over-analyzing simple statements
+    if (content.trim().length < 100) {
+      logger.info('Short claim detected, bypassing complex preprocessing');
+      return await verifyFactsWithPerplexity(content);
+    }
+    
     const preprocessed = await preprocessWithAI(content);
     logger.debug('AI Preprocessing result:', preprocessed);
 

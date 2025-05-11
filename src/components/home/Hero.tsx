@@ -106,7 +106,7 @@ const Hero: React.FC = () => {
               transition={{ duration: 0.5, delay: 0.4 }}
               className="mt-4 text-xl text-white text-opacity-90 max-w-lg mx-auto md:mx-0"
             >
-              Our AI-powered platform helps verify information during the India-Pakistan conflict, giving you reliable facts in real-time.
+              Our AI-powered platform helps verify information, giving you reliable facts in real-time to combat misinformation.
             </motion.p>
             <motion.div
               initial={{ opacity: 0 }}
