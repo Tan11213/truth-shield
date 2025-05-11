@@ -1,3 +1,87 @@
+# TruthShield
+
+TruthShield is a modern fact-checking application designed to help users verify information in various formats including text, images, and URLs.
+
+## Features
+
+- **Text Fact Checking**: Submit claims and statements to verify their accuracy
+- **Image Analysis**: Upload images and extract text using Google Gemini 2.0 Flash for advanced OCR
+- **URL Verification**: Check the credibility of websites and social media posts
+- **Comprehensive Results**: Get detailed explanations, sources, and confidence levels
+- **Cross-Platform**: Works on desktop and mobile browsers
+
+## Technology Stack
+
+- React.js + TypeScript for the front-end
+- Perplexity Llama-3.1-Sonar-Small-128k-Online model for fact-checking
+- Google Gemini 2.0 Flash for OCR and text extraction
+- Framer Motion for animations
+- TailwindCSS for styling
+
+## Installation
+
+1. Clone this repository
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Copy `.env.example` to `.env` and add your API keys:
+   ```bash
+   cp .env.example .env
+   ```
+4. Start the development server:
+   ```bash
+   npm start
+   ```
+
+## Required API Keys
+
+To use all features of TruthShield, you need the following API keys:
+
+1. **Perplexity API Key**: For fact-checking and analysis
+   - Get it from: https://www.perplexity.ai/settings/api
+
+2. **Google Gemini API Key**: For OCR and text extraction from images
+   - Get it from: https://aistudio.google.com/app/apikey
+   - Note: Although the API endpoint is named `gemini-1.5-flash-latest`, this is indeed the Gemini 2.0 Flash model.
+
+Add these keys to your `.env` file:
+
+```bash
+REACT_APP_PERPLEXITY_API_KEY=your_perplexity_api_key_here
+REACT_APP_GEMINI_API_KEY=your_gemini_api_key_here
+```
+
+## Architecture
+
+TruthShield follows a modular architecture:
+
+- `components/`: UI components organized by feature
+- `services/`: API integration services for Perplexity and Gemini
+- `utils/`: Utility functions including OCR and logging
+- `pages/`: Main application pages
+- `docs/`: Documentation files
+
+## OCR Implementation
+
+TruthShield uses Google Gemini 2.0 Flash for OCR, which provides:
+
+- High accuracy text extraction from complex layouts
+- Support for multiple languages
+- Automatic detection of social media platforms
+- Structured claim extraction for better fact-checking
+- Ability to extract text in different colors and formats (including blue links and highlighted text)
+
+For more information, see [OCR_TROUBLESHOOTING.md](./src/docs/OCR_TROUBLESHOOTING.md).
+
+## License
+
+[MIT License](LICENSE)
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
 # Getting Started with Create React App
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).

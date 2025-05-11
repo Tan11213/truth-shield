@@ -39,7 +39,7 @@ const PERPLEXITY_MODEL = 'llama-3.1-sonar-small-128k-online';
 
 // Google Gemini API settings for preprocessing
 const GEMINI_API_ENDPOINT_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'; 
-const GEMINI_MODEL = 'gemini-1.5-flash-latest'; // Or your preferred Gemini model
+const GEMINI_MODEL = 'gemini-1.5-flash-latest'; // Use Gemini 2.0 Flash explicitly
 const GEMINI_API_KEY = process.env.REACT_APP_GEMINI_API_KEY;
 
 // Create axios instance for Perplexity API
@@ -92,6 +92,7 @@ When analyzing claims:
 4. Include a clear "SOURCES:" section at the end with a numbered list matching your in-text citations.
 5. Format each source as: NUMBER. TITLE - URL
    Example: 1. NASA Climate Data - https://climate.nasa.gov/evidence/
+6. Use a diverse range of sources including news articles, academic publications, YouTube videos, social media statements, government data, and other reliable sources. Don't limit yourself only to news articles.
 
 Your response MUST follow this structure:
 [VERDICT] - A clear overall judgment.

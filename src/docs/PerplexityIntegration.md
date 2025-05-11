@@ -56,7 +56,7 @@ export interface FactCheckResult {
 // Perplexity API settings
 const API_URL = 'https://api.perplexity.ai/chat/completions';
 const API_KEY = process.env.REACT_APP_PERPLEXITY_API_KEY;
-const MODEL = 'pplx-70b-online'; // Choose the model that best fits your needs
+const MODEL = 'llama-3.1-sonar-small-128k-online'; // Using Llama 3.1 Sonar Small 128k model
 
 // Create axios instance with Perplexity API configuration
 const perplexityClient = axios.create({

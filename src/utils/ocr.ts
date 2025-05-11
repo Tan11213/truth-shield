@@ -1,5 +1,5 @@
-import { createWorker, PSM } from 'tesseract.js';
 import logger from './logger';
+import { extractTextFromImageWithGemini, getStructuredClaimFromText } from '../services/geminiService';
 
 /**
  * Main exported function to extract text from an image using OCR.
@@ -9,131 +9,88 @@ import logger from './logger';
 export const extractTextFromImage = async (file: File): Promise<string> => {
   try {
     logger.info('Starting OCR text extraction', { 
-      provider: 'Tesseract.js',
+      provider: 'Gemini',
       fileName: file.name,
       fileSize: file.size
     });
     
     const timing = logger.timing('OCR extraction');
     
-    const rawText = await extractTextWithTesseract(file);
-    const cleanedText = cleanupOcrText(rawText);
+    // Convert file to base64
+    const base64Image = await fileToDataUrl(file);
+    
+    // Use Gemini for OCR extraction
+    const geminiResult = await extractTextFromImageWithGemini(base64Image);
+    
+    // Post-process the text for better display
+    const processedText = postProcessOcrText(geminiResult.extractedText);
     
     timing.end({ 
-      originalLength: rawText.length,
-      cleanedLength: cleanedText.length
+      originalLength: geminiResult.extractedText.length,
+      cleanedLength: processedText.length
     });
     
-    logger.debug('OCR extraction completed', {
-      cleanedTextLength: cleanedText.length,
-      textSample: cleanedText.substring(0, 100),
-      hasText: cleanedText.trim().length > 0
+    logger.debug('OCR extraction completed with Gemini', {
+      extractedTextLength: geminiResult.extractedText.length,
+      processedTextLength: processedText.length,
+      textSample: processedText.substring(0, 100),
+      hasText: processedText.trim().length > 0
     });
     
-    if (!cleanedText.trim()) {
+    if (!processedText.trim()) {
       return "No significant text detected in image. Please try a clearer image or enter text manually.";
     }
     
-    return cleanedText;
+    return processedText;
   } catch (error) {
     logger.error('OCR Error in extractTextFromImage', { 
       error: error instanceof Error ? error.message : String(error),
       fileName: file.name 
     });
-    // Return a user-friendly error message or rethrow, depending on desired app behavior
     throw new Error('Failed to extract text from image due to an OCR error.');
   }
 };
 
 /**
- * Core Tesseract OCR extraction logic.
- * @param file Image file to process.
- * @returns Raw extracted text.
+ * Post-processes OCR text to improve readability in UI
+ * @param text Raw OCR text
+ * @returns Formatted text
  */
-async function extractTextWithTesseract(file: File): Promise<string> {
-  let worker;
-  try {
-    logger.debug('Initializing Tesseract worker');
-    worker = await createWorker('eng', undefined, {
-      logger: m => {
-        if (m.status === 'recognizing text') {
-          logger.debug(`Tesseract OCR progress: ${(m.progress * 100).toFixed(0)}%`);
-        }
-      },
-    });
-
-    await worker.setParameters({
-      tessedit_pageseg_mode: PSM.SPARSE_TEXT_OSD, // Use sparse text with OSD
-      preserve_interword_spaces: '1',    // Preserve spaces between words.
-    });
-    
-    logger.debug('Processing image with Tesseract');
-    const { data } = await worker.recognize(file);
-    logger.info('Tesseract recognition complete', { confidence: data?.confidence });
-    
-    return data?.text || '';
-  } catch (error) {
-    logger.error('Tesseract OCR core error', {
-      error: error instanceof Error ? error.message : String(error)
-    });
-    throw error; // Rethrow to be caught by the calling function
-  } finally {
-    if (worker) {
-      await worker.terminate();
-      logger.debug('Tesseract worker terminated');
-    }
-  }
-}
-
-/**
- * Cleans up raw OCR text output.
- * @param rawText The raw text string from Tesseract.
- * @returns A cleaned-up text string.
- */
-function cleanupOcrText(rawText: string): string {
-  if (!rawText || typeof rawText !== 'string') {
+function postProcessOcrText(text: string): string {
+  if (!text || typeof text !== 'string') {
     return '';
   }
-
-  let text = rawText;
-
-  // 1. Normalize newline characters to a single \n
+  
+  // Remove any instruction or prefix content (like "EXTRACTED TEXT:")
+  if (text.includes('EXTRACTED TEXT:')) {
+    const startIndex = text.indexOf('EXTRACTED TEXT:') + 'EXTRACTED TEXT:'.length;
+    let endIndex = text.length;
+    
+    // Check if there are other section markers
+    const nextSectionMatch = text.substring(startIndex).match(/\n\n[A-Z\s]+:/);
+    if (nextSectionMatch && nextSectionMatch.index !== undefined) {
+      endIndex = startIndex + nextSectionMatch.index;
+    }
+    
+    text = text.substring(startIndex, endIndex).trim();
+  }
+  
+  // Normalize newlines and remove excess whitespace
   text = text.replace(/\r\n|\r/g, '\n');
-
-  // 2. Replace multiple spaces/tabs with a single space, then trim lines
-  const lines = text.split('\n').map(line => line.replace(/[\s\t]+/g, ' ').trim());
-
-  // 3. Filter out very short lines or lines that are mostly non-alphanumeric (OCR noise)
-  //    Also, remove lines that seem to be page separators or artifacts.
-  const cleanedLines = lines.filter(line => {
-    if (line.length < 3) return false; // Remove very short lines
-    // Remove lines that are just separators like '-----' or '====='
-    if (/^[\-=_—\*\+ ]+$/.test(line)) return false; 
-    const alphanumericChars = (line.match(/[a-zA-Z0-9]/g) || []).length;
-    const totalChars = line.length;
-    // Keep lines with a decent ratio of alphanumeric characters
-    // Adjust ratio as needed; 0.4 means at least 40% alphanumeric
-    return (alphanumericChars / totalChars) > 0.4 || line.length > 10; // Keep longer lines even if lower ratio
-  });
-
-  text = cleanedLines.join('\n');
-
-  // 4. Attempt to rejoin words hyphenated at the end of a line
-  //    e.g., "example-
-  //           text" becomes "exampletext"
-  text = text.replace(/([a-zA-Z])-\n([a-zA-Z])/g, '$1$2');
-
-  // 5. Reduce multiple consecutive newlines to a maximum of two (to preserve paragraph breaks)
+  text = text.split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0)
+    .join('\n');
+    
+  // Remove duplicate newlines but preserve paragraph breaks
   text = text.replace(/\n{3,}/g, '\n\n');
-
-  // 6. Final trim of the whole text
+  
   return text.trim();
 }
 
-
 /**
  * Processes a social media screenshot to extract content and context.
- * Uses the improved general OCR function.
+ * Uses Gemini for advanced image understanding.
  * @param file The screenshot image file.
  * @returns Object containing extracted text and platform information.
  */
@@ -145,12 +102,17 @@ export const processSocialMediaScreenshot = async (file: File): Promise<{
   imageDimensions?: { width: number; height: number };
 }> => {
   try {
-    const rawText = await extractTextFromImage(file); // Uses general, cleaned OCR
+    // Convert file to base64
+    const base64Image = await fileToDataUrl(file);
+    
+    // Use Gemini for OCR and analysis
+    const geminiResult = await extractTextFromImageWithGemini(base64Image);
     const dimensions = await getImageDimensions(file);
     
+    // Basic platform detection based on extracted text
     let platform: 'twitter' | 'facebook' | 'instagram' | 'reddit' | 'tiktok' | 'other' | undefined;
+    const rawText = geminiResult.extractedText;
     
-    // Basic platform detection based on keywords (can be expanded)
     if (/twitter|tweet|@\w+|x\.com/i.test(rawText)) platform = 'twitter';
     else if (/facebook|fb\.com/i.test(rawText)) platform = 'facebook';
     else if (/instagram|insta|ig/i.test(rawText)) platform = 'instagram';
@@ -159,12 +121,14 @@ export const processSocialMediaScreenshot = async (file: File): Promise<{
     
     const hasUsername = /@\w+|u\/\w+|\/u\/\w+/i.test(rawText);
     
-    // Basic claim extraction (longest sentence or first 200 chars)
-    const sentences = rawText.split(/[.!?]+/).filter(s => s.trim().length > 15); // Consider longer sentences for claims
-    sentences.sort((a, b) => b.length - a.length);
-    const potentialClaim = sentences.length > 0 ? sentences[0].trim() : rawText.substring(0, 200).trim();
+    // Use Gemini's structured claim as the potential claim
+    const potentialClaim = geminiResult.structuredClaim;
     
-    logger.info('Social media screenshot processed (using general OCR)', { platform, hasUsername, dimensions });
+    logger.info('Social media screenshot processed with Gemini', { 
+      platform, 
+      hasUsername, 
+      dimensions 
+    });
     
     return {
       text: rawText,
@@ -174,10 +138,9 @@ export const processSocialMediaScreenshot = async (file: File): Promise<{
       imageDimensions: dimensions
     };
   } catch (error) {
-    logger.error('Social media screenshot processing error (general OCR)', {
+    logger.error('Social media screenshot processing error with Gemini', {
       error: error instanceof Error ? error.message : String(error)
     });
-    // Decide if you want to throw or return a default object
     throw new Error('Failed to process social media screenshot.');
   }
 };

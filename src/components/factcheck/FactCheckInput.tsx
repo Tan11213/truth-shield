@@ -56,30 +56,42 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
   const [showUploading, setShowUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [claimText, setClaimText] = useState('');
+  const [processedFileId, setProcessedFileId] = useState<string | null>(null);
   
-  // When a file is added, process it with OCR
+  // When a file is added, process it with OCR only if it's a new file
   useEffect(() => {
     if (file && activeTab === 'image') {
-      processImageWithOcr();
+      // Create a unique ID for the current file
+      const currentFileId = `${file.name}-${file.size}-${file.lastModified}`;
+      
+      // Only process the file if it hasn't been processed yet
+      if (processedFileId !== currentFileId) {
+        setProcessedFileId(currentFileId);
+        processImageWithOcr();
+      }
     }
   }, [file, activeTab]);
   
-  // Ensure text is displayed after OCR processing completes
+  // Modify the useEffect that handles OCR completion
   useEffect(() => {
-    // Check if OCR has just completed and we have extracted text
-    if (!isOcrProcessing && file && extractedText) {
-      // Ensure text area is visible
+    // Check if OCR has just completed (transition from processing to not processing)
+    // and we have extracted text
+    if (isOcrProcessing === false && file && extractedText) {
+      // Ensure the text area is visible
       setShowExtractedText(true);
       
-      // Direct DOM update to ensure the text is displayed
+      // Attempt to focus the text area (helps with visibility)
       setTimeout(() => {
         const textArea = document.getElementById('extracted-text') as HTMLTextAreaElement;
         if (textArea) {
-          // Force value directly in DOM if needed
-          if (textArea.value !== extractedText) {
-            textArea.value = extractedText;
-            console.log('Forced text area update with extracted text of length:', extractedText.length);
-          }
+          // Ensure it's visible in the DOM
+          textArea.style.display = 'block';
+          
+          // Scroll it into view if needed
+          textArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          
+          // Log success for debugging
+          console.log('OCR processing completed, text area ensured visible');
         }
       }, 200);
     }
@@ -181,18 +193,9 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
         setShowImageError(true);
       }
       
-      await new Promise(resolve => {
-        setExtractedText(processedText);
-        setShowExtractedText(true); // Ensure this is true
-        setTimeout(() => {
-          const textArea = document.getElementById('extracted-text') as HTMLTextAreaElement;
-          if (textArea && textArea.value !== processedText) {
-            textArea.value = processedText;
-            console.log('Force-updated textarea DOM (general) with text length:', processedText.length);
-          }
-          resolve(null);
-        }, 100);
-      });
+      // Update the extracted text state directly
+      setExtractedText(processedText);
+
     } catch (error) {
       console.error('OCR processing error (general flow):', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to extract text from image.';
@@ -212,6 +215,8 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
       setFile(file);
       setShowUploading(true);
       setSelectedFile(file);
+      // Reset processed file ID to force processing of the new file
+      setProcessedFileId(null);
       
       // The useEffect hook will trigger processImageWithOcr when the file state changes
     }
@@ -238,7 +243,10 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
     setIsDragging(false);
     
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      setFile(e.dataTransfer.files[0]);
+      const newFile = e.dataTransfer.files[0];
+      setFile(newFile);
+      // Reset processed file ID to force processing of the new file
+      setProcessedFileId(null);
     }
   };
   
@@ -331,7 +339,14 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
       >
         <Icon />
       </motion.div>
-      <span>{label}</span>
+      <span className="relative">
+        {label}
+        {type === 'url' && (
+          <span className="absolute -top-2 -right-12 bg-gray-200 text-gray-600 text-[8px] px-1 py-0.5 rounded-sm whitespace-nowrap">
+            Coming Soon
+          </span>
+        )}
+      </span>
     </MotionButton>
   );
   
@@ -427,9 +442,20 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
                     </motion.div>
                     <p className="text-sm font-medium text-gray-900">{file.name}</p>
                     <p className="text-xs text-gray-500 mt-1">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                    
+                    {/* Image Preview */}
+                    <div className="mt-3 mb-2 border rounded-lg overflow-hidden shadow-sm max-w-[320px] max-h-[200px] w-full">
+                      <img 
+                        src={URL.createObjectURL(file)} 
+                        alt="Preview" 
+                        className="w-full h-full object-contain"
+                        onLoad={(e) => URL.revokeObjectURL((e.target as HTMLImageElement).src)}
+                      />
+                    </div>
+                    
                     <MotionButton 
                       type="button"
-                      className="mt-3 px-3 py-1 bg-white text-gray-600 border border-gray-200 rounded-md text-xs hover:bg-gray-50 flex items-center"
+                      className="mt-2 px-3 py-1 bg-white text-gray-600 border border-gray-200 rounded-md text-xs hover:bg-gray-50 flex items-center"
                       onClick={(e) => {
                         e.stopPropagation();
                         setFile(null);
@@ -441,6 +467,7 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
                         setDetectedPlatform(null);
                         setShowPlatformIndicator(false);
                         setIsOcrProcessing(false);
+                        setProcessedFileId(null);
                         if (fileInputRef.current) {
                           fileInputRef.current.value = '';
                         }
@@ -487,7 +514,7 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
               >
                 <FiInfo className="mt-0.5 mr-2 flex-shrink-0" />
                 <div>
-                  <p className="font-medium">Tesseract.js OCR Tips:</p>
+                  <p className="font-medium">Gemini OCR Tips:</p>
                   <ul className="mt-1 list-disc list-inside">
                     <li>Use high-contrast images for best results</li>
                     <li>Processing may take time for larger images</li>
@@ -511,7 +538,7 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
                     <FiLoader />
                   </div>
                   <p className="text-sm text-blue-700">
-                    Analyzing image with Tesseract.js... This may take a minute for larger images.
+                    Analyzing image with Gemini OCR... This may take a moment.
                   </p>
                 </div>
               )}
@@ -527,7 +554,7 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
                   <div className="flex items-start">
                     <FiInfo className="mt-0.5 mr-2 flex-shrink-0" />
                     <div className="flex-1">
-                      <p className="font-medium">Tesseract OCR Error</p>
+                      <p className="font-medium">Gemini OCR Error</p>
                       <p className="mt-1 text-red-500 whitespace-pre-line">{imageError}</p>
                       <div className="mt-3 flex flex-wrap gap-2">
                         {file && (
@@ -576,17 +603,22 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
                       <FiEdit2 className="mr-1" /> Editable
                     </div>
                   </div>
+                  
+                  {/* Force textarea visibility with inline style */}
                   <MotionTextArea
                     id="extracted-text"
                     rows={6}
                     className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
                     placeholder={isOcrProcessing ? "Extracting text..." : "Extracted text will appear here. You can edit it before verification."}
                     value={extractedText}
-                    onChange={(e) => setExtractedText(e.target.value)}
+                    onChange={(e) => {
+                      // Simple direct update without additional processing to prevent editing issues
+                      setExtractedText(e.target.value);
+                    }}
                     variants={itemVariants}
                     whileFocus={{ scale: 1.01, boxShadow: "0 0 0 3px rgba(59, 130, 246, 0.1)" }}
                     disabled={isOcrProcessing}
-                    key={`textarea-${file?.name || 'no-file'}-${isOcrProcessing ? 'processing' : 'idle'}`}
+                    style={{ display: 'block' }} // Force display
                   ></MotionTextArea>
                   
                   {process.env.NODE_ENV !== 'production' && (
@@ -599,7 +631,13 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
             </div>
             
             {/* URL Input */}
-            <div style={{ display: activeTab === 'url' ? 'block' : 'none' }}>
+            <div style={{ display: activeTab === 'url' ? 'block' : 'none' }} className="relative">
+              {/* Coming Soon Overlay */}
+              <div className="absolute inset-0 z-10 bg-white bg-opacity-80 backdrop-blur-sm flex flex-col items-center justify-center">
+                <div className="bg-primary-100 text-primary-800 font-semibold py-1 px-3 rounded-full text-sm mb-2">Coming Soon</div>
+                <p className="text-gray-600 text-center text-sm max-w-md px-4">URL and social media verification functionality is under development. Check back soon!</p>
+              </div>
+              
               <motion.label 
                 htmlFor="url-input" 
                 className="block text-sm font-medium text-gray-700 mb-2"
