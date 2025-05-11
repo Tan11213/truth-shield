@@ -6,11 +6,14 @@
 // Environment variables
 const isDev = process.env.NODE_ENV === 'development';
 const logLevel = process.env.REACT_APP_LOG_LEVEL || 'info';
-const enableAnalytics = process.env.REACT_APP_ENABLE_ANALYTICS !== 'false';
+// Disable analytics by default until server is set up
+const enableAnalytics = false; // process.env.REACT_APP_ENABLE_ANALYTICS !== 'false';
 const debugMode = process.env.REACT_APP_DEBUG === 'true';
 
 // API endpoint for centralized logging
-const LOG_ENDPOINT = process.env.REACT_APP_LOG_API || 'https://api.truthshield.org/logs';
+// Commented out until server is properly configured
+// const LOG_ENDPOINT = process.env.REACT_APP_LOG_API || 'https://api.truthshield.org/logs';
+const LOG_ENDPOINT = process.env.REACT_APP_LOG_API || 'http://localhost:3000/api/logs';
 
 /**
  * Custom log levels with numeric values for comparison
@@ -87,8 +90,8 @@ export const log = (level: LogLevel, message: string, ...args: any[]) => {
  * Send logs to remote server for analytics
  */
 async function sendLogToServer(level: LogLevel, message: string, args: any[]): Promise<void> {
-  // Skip if analytics are disabled
-  if (!enableAnalytics) return;
+  // Skip if analytics are disabled or development environment
+  if (!enableAnalytics || isDev) return;
   
   try {
     const logData = {
@@ -101,8 +104,13 @@ async function sendLogToServer(level: LogLevel, message: string, args: any[]): P
       userAgent: navigator.userAgent
     };
     
+    // Temporarily disabled until proper server endpoint is available
+    console.debug('[Remote Logging disabled] Would send log data:', logData);
+    
+    // Commented out actual sending logic until server is ready
+    /*
     // Use navigator.sendBeacon for non-blocking logs
-    if (navigator.sendBeacon) {
+    if (typeof navigator.sendBeacon === 'function') {
       navigator.sendBeacon(LOG_ENDPOINT, JSON.stringify(logData));
     } else {
       // Fallback to fetch with keepalive
@@ -117,6 +125,7 @@ async function sendLogToServer(level: LogLevel, message: string, args: any[]): P
         // Ignore errors - we don't want logging to cause issues
       });
     }
+    */
   } catch (error) {
     // Silent failure for logging
   }
@@ -143,14 +152,18 @@ export const reportError = async (
   
   log('error', `Error in ${componentName || 'unknown'}:`, error);
   
-  // In development, just log to console
-  if (isDev) {
+  // In development or if analytics disabled, just log to console
+  if (isDev || !enableAnalytics) {
     console.group('Error Report (Would be sent in production)');
     console.error(errorReport);
     console.groupEnd();
     return;
   }
   
+  // Remote reporting temporarily disabled
+  console.debug('[Remote Error Reporting disabled] Would send error:', errorReport);
+  
+  /*
   // In production, send to reporting endpoint
   try {
     // Use fetch with keepalive to ensure the request completes even during page navigation
@@ -171,6 +184,7 @@ export const reportError = async (
     // Handle error in the error reporter (safely fail)
     console.error('Failed to report error:', reportError);
   }
+  */
 };
 
 /**

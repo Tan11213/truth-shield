@@ -1,177 +1,176 @@
 # TruthShield Production Deployment Guide
 
-This guide provides instructions for deploying TruthShield to production environments.
+This guide provides instructions for deploying TruthShield to production environments, with a focus on Vercel deployment.
+
+## Architecture Overview
+
+TruthShield uses a modern architecture with:
+
+1. **React Frontend**: The client-side application built with React and TypeScript.
+2. **Vercel Serverless Functions**: Backend endpoints that handle API calls requiring authentication.
+3. **External API Integration**: Perplexity AI for fact-checking and Google Gemini for content preprocessing.
 
 ## Prerequisites
 
 - Node.js 16.x or higher
 - NPM 8.x or higher
-- Perplexity API key (https://www.perplexity.ai/settings/api)
-- Optional: Google Cloud Vision API key (for improved OCR)
+- Perplexity API key (must start with "pplx-")
+- Gemini API key (optional but recommended)
+- Vercel account (for deployment)
 
-## Environment Setup
+## API Key Security
 
-1. Create a `.env` file in the project root with the following variables:
+TruthShield has been designed to use Vercel Serverless Functions for handling all API calls that require authentication keys. This approach provides several security benefits:
+
+1. **No Client-Side API Keys**: API keys are never exposed in the client-side code
+2. **Backend Validation**: All API calls are processed through secure server-side functions
+3. **Proper Authentication**: Each API endpoint properly authenticates with external services
+4. **Environment Variables**: API keys are stored as environment variables in Vercel
+
+### Required API Keys
+
+- **Perplexity API Key**: Must start with "pplx-" (Required for fact-checking)
+  - Get from: https://www.perplexity.ai/settings/api
+  
+- **Google Gemini API Key**: (Optional, enhances text analysis)
+  - Get from: https://aistudio.google.com/app/apikey
+
+### Setting Up API Keys in Vercel
+
+When deploying, set up these environment variables in the Vercel dashboard:
+
+1. Go to your project settings
+2. Navigate to "Environment Variables"
+3. Add the following variables:
+   - `PERPLEXITY_API_KEY` - Your Perplexity API key
+   - `GEMINI_API_KEY` - Your Google Gemini API key
+
+IMPORTANT: Never hardcode API keys in the source code. Always use environment variables.
+
+## Local Development Setup
+
+For local development, create a `.env` file in the project root with the following structure:
 
 ```
-# TruthShield Environment Configuration
+# API Keys
+PERPLEXITY_API_KEY=pplx-your_perplexity_key_here
+GEMINI_API_KEY=your_gemini_key_here
 
-# Perplexity API for fact-checking (REQUIRED)
-REACT_APP_PERPLEXITY_API_KEY=your_perplexity_api_key_here
-
-# OCR Configuration 
-# Set to true to use Google Cloud Vision instead of Tesseract.js
-REACT_APP_USE_CLOUD_VISION=true
-# Required if REACT_APP_USE_CLOUD_VISION is true
-REACT_APP_GOOGLE_CLOUD_VISION_API_KEY=your_google_cloud_vision_key_here
-
-# Analytics and logging (optional)
-REACT_APP_ENABLE_ANALYTICS=true
-REACT_APP_LOG_LEVEL=info
-# Endpoint for centralized logging
-REACT_APP_LOG_API=https://api.truthshield.app/logs
-
-# Application settings
-REACT_APP_APP_NAME=TruthShield
-REACT_APP_API_BASE_URL=https://api.truthshield.app
-
-# Optional: Set to true to enable persistent debug mode
-REACT_APP_DEBUG=false
+# Frontend config
+REACT_APP_DEBUG=true
 ```
 
-2. Make sure `.env` is listed in your `.gitignore` file to prevent exposing sensitive information.
+Make sure `.env` is listed in your `.gitignore` file to prevent exposing sensitive information.
 
-## OCR Configuration
+## Vercel Deployment Steps
 
-TruthShield supports two OCR engines for processing social media screenshots and images:
-
-1. **Tesseract.js (Default)**: 
-   - Open-source OCR engine that works entirely in the browser
-   - No API keys required
-   - Limited accuracy with complex screenshots
-   - Lower cost (free)
-
-2. **Google Cloud Vision API (Recommended)**:
-   - Much higher accuracy, especially for social media content
-   - Requires a Google Cloud account and API key
-   - Better language support
-   - Higher cost (pay-per-use)
-
-To enable Google Cloud Vision:
-1. Create a Google Cloud account
-2. Enable the Vision API
-3. Create an API key
-4. Set `REACT_APP_USE_CLOUD_VISION=true` in your .env file
-5. Add your API key as `REACT_APP_GOOGLE_CLOUD_VISION_API_KEY`
-
-## Reporting and Logging Integration
-
-TruthShield includes a comprehensive content reporting system integrated with logging:
-
-1. **User Reports**: 
-   - Users can report issues with fact-checking results
-   - Reports are categorized (misinformation, bias, offensive content, technical issues)
-   - Optional user email for follow-up
-
-2. **Logging Integration**:
-   - All reports are automatically logged to the centralized logging system
-   - Reports include content context, timestamp, and user feedback
-   - Performance metrics for report handling are tracked
-
-3. **Analytics Dashboard** (requires backend implementation):
-   - Track report volume and categories
-   - Identify problematic content or sources
-   - Monitor user engagement with reporting features
-
-Configure the logging endpoint with `REACT_APP_LOG_API` in your environment settings.
-
-## Building for Production
-
-We've added special scripts for production builds:
-
-```bash
-# Build with source maps disabled (recommended for production)
-npm run build:production
-
-# Analyze the bundle size (useful for optimization)
-npm run build:analyze
-
-# Test the production build locally
-npm run serve:build
-```
-
-## Optimizations Applied
-
-The following optimizations have been applied to make the app production-ready:
-
-1. **Perplexity API Integration**:
-   - Improved error handling and retries
-   - Better prompt engineering for accurate fact checking
-   - Support for text, image, and URL content types
-   
-2. **Social Media Screenshot Analysis**:
-   - Enhanced OCR with Google Cloud Vision support
-   - Platform detection (Twitter/X, Facebook, Instagram, Reddit, TikTok)
-   - Automatic extraction of claims from screenshots
-   - Image dimension analysis for better context
-   
-3. **Logging and Monitoring**:
-   - Production-grade logging with configurable levels
-   - Error reporting with session tracking
-   - Performance monitoring for critical operations
-   - Content reporting integration
-
-4. **Security Improvements**:
-   - Environment variable protection
-   - API key security
-   - Source map protection for production builds
-
-## Deployment Options
-
-### Option 1: Static Hosting
-
-The app can be deployed to any static hosting service:
-
-1. Run `npm run build:production`
-2. Deploy the `build` directory to your hosting provider
-3. Configure environment variables on your hosting platform
-
-Recommended providers:
-- Netlify
-- Vercel
-- AWS S3 + CloudFront
-- Firebase Hosting
-
-### Option 2: Docker Deployment
-
-For containerized deployments:
-
-1. Build the Docker image:
-   ```
-   docker build -t truthshield:latest .
+1. **Prepare your project**
+   ```bash
+   npm run build
    ```
 
-2. Run the container:
-   ```
-   docker run -p 80:80 -e REACT_APP_PERPLEXITY_API_KEY=your_api_key truthshield:latest
+2. **Install Vercel CLI (if not already installed)**
+   ```bash
+   npm i -g vercel
    ```
 
-## Maintenance and Monitoring
+3. **Deploy to Vercel**
+   ```bash
+   vercel
+   ```
 
-1. **Regular Updates**:
+4. **Set environment variables**
+   - You'll be prompted to set environment variables during deployment, or
+   - You can set them in the Vercel dashboard after deployment
+
+5. **Verify deployment**
+   - Check the deployment URL provided by Vercel
+   - Test all API endpoints to ensure they're working correctly
+   - Monitor logs for any issues
+
+## Serverless Function Structure
+
+TruthShield uses the following serverless functions:
+
+1. **`api/verify-fact.js`**: 
+   - Purpose: Verifies text claims using Perplexity AI
+   - Method: POST
+   - Required parameters: `{ claim: "text to verify" }`
+
+2. **`api/analyze-web-content.js`**: 
+   - Purpose: Analyzes web content using Perplexity AI
+   - Method: POST
+   - Required parameters: `{ url: "https://example.com/article" }`
+
+3. **`api/preprocess-content.js`**: 
+   - Purpose: Preprocesses content to extract claims and summaries using Gemini AI
+   - Method: POST
+   - Required parameters: `{ content: "text to process" }`
+
+4. **`api/logs.js`**: 
+   - Purpose: Captures client-side logs for monitoring and debugging
+   - Method: POST
+   - Parameters: Varies based on log type
+
+## Monitoring and Troubleshooting
+
+### Vercel Logs
+
+To view logs for your serverless functions:
+1. Go to your Vercel dashboard
+2. Select your project
+3. Navigate to "Functions" or "Logs"
+4. Filter by function name or status code
+
+### Common Issues
+
+1. **API Key Authentication Errors (401)**
+   - Check that your Perplexity API key starts with "pplx-"
+   - Verify the key is correctly set in environment variables
+   - Try regenerating the API key
+
+2. **Missing Environment Variables**
+   - Ensure all required variables are set in the Vercel dashboard
+   - Check for typos in variable names (case-sensitive)
+
+3. **Rate Limiting Issues (429)**
+   - Implement retry logic with exponential backoff
+   - Consider upgrading your Perplexity API plan
+
+## Performance Optimization
+
+1. **Cold Start Mitigation**
+   - Keep your serverless functions small and focused
+   - Minimize dependencies to reduce bundle size
+   - Consider using Vercel's Edge Functions for faster cold starts
+
+2. **Caching Strategy**
+   - Implement caching for frequently checked claims
+   - Use Vercel's Edge Cache when possible
+
+## Security Best Practices
+
+1. **API Key Rotation**
+   - Regularly rotate your API keys
+   - Update environment variables in Vercel after rotation
+
+2. **Input Validation**
+   - All serverless functions implement input validation
+   - Never trust client-side data without validation
+
+3. **Rate Limiting**
+   - Implement rate limiting for public endpoints
+   - Monitor for unusual patterns of access
+
+## Maintenance
+
+1. **Regular Updates**
    - Keep dependencies updated using `npm audit` and `npm update`
-   - Check Perplexity API usage and billing
-   - Monitor Google Cloud Vision API usage if enabled
+   - Check for Perplexity API and Gemini API updates or changes
 
-2. **Performance Monitoring**:
-   - Monitor API response times through our built-in timing loggers
-   - Use browser performance tools to identify client-side bottlenecks
-   - Track OCR performance metrics to determine if Vision API is cost-effective
-
-3. **Error Tracking**:
-   - Set up alert notifications for critical errors
-   - Review error logs regularly to identify common issues
-   - Monitor user reports for potential system improvements
+2. **Monitoring**
+   - Set up Vercel Analytics to monitor performance
+   - Implement error tracking and alerting
 
 ## Contact and Support
 

@@ -1,4 +1,4 @@
-import axios from 'axios';
+import logger from '../utils/logger';
 
 interface MisinformationData {
   claim: string;
@@ -9,11 +9,9 @@ interface MisinformationData {
   region?: string;
 }
 
-// Mock backend endpoint for analytics
-const API_ENDPOINT = 'https://api.truthshield.org/analytics';
-
 /**
  * Tracks a fact-checking attempt for analytics purposes
+ * Currently logs but doesn't send to backend
  */
 export const trackFactCheck = async (data: Omit<MisinformationData, 'timestamp'>): Promise<void> => {
   try {
@@ -22,63 +20,32 @@ export const trackFactCheck = async (data: Omit<MisinformationData, 'timestamp'>
       timestamp: new Date().toISOString(),
     };
     
-    // In production, this would send data to a real backend
-    // For now, we'll just log it to console
-    console.log('Analytics data tracked:', analyticsData);
+    logger.debug('Analytics data tracked locally', {
+      category: analyticsData.category,
+      source: analyticsData.source,
+      result: analyticsData.verificationResult
+    });
     
-    // Mock API call - in production, uncomment this
-    /*
-    await axios.post(API_ENDPOINT + '/track', analyticsData);
-    */
-    
-    // Store in local storage for demo purposes
-    const existingData = localStorage.getItem('truthshield_analytics');
-    const storedData = existingData ? JSON.parse(existingData) : [];
-    localStorage.setItem('truthshield_analytics', JSON.stringify([...storedData, analyticsData]));
-    
+    // Skip backend call, just log locally
   } catch (error) {
-    console.error('Error tracking analytics data:', error);
+    // Don't let analytics errors break the application
+    logger.error('Error logging analytics data:', error);
   }
 };
 
 /**
  * Get trending misinformation by category
+ * Returns mock data
  */
 export const getTrendingMisinformation = async (): Promise<{category: string, count: number}[]> => {
-  try {
-    // In production, fetch from real backend
-    // For demo, we'll use localStorage data
-    const existingData = localStorage.getItem('truthshield_analytics');
-    if (!existingData) return getMockTrendingData();
-    
-    const storedData = JSON.parse(existingData) as MisinformationData[];
-    
-    // Group by category and count
-    const categoryCounts: Record<string, number> = {};
-    storedData.forEach(item => {
-      if (categoryCounts[item.category]) {
-        categoryCounts[item.category]++;
-      } else {
-        categoryCounts[item.category] = 1;
-      }
-    });
-    
-    // Convert to array of objects and sort by count
-    const trendingData = Object.entries(categoryCounts).map(([category, count]) => ({
-      category,
-      count
-    })).sort((a, b) => b.count - a.count);
-    
-    return trendingData.length ? trendingData : getMockTrendingData();
-    
-  } catch (error) {
-    console.error('Error fetching trending misinformation:', error);
-    return getMockTrendingData();
-  }
+  logger.debug('Returning mock trending data');
+  
+  // Always return mock data
+  return getMockTrendingData();
 };
 
 /**
- * Get mock trending data for the demo
+ * Mock trending data
  */
 const getMockTrendingData = (): {category: string, count: number}[] => {
   return [
@@ -92,8 +59,19 @@ const getMockTrendingData = (): {category: string, count: number}[] => {
 
 /**
  * Get common misinformation patterns
+ * Returns mock data
  */
-export const getCommonMisinformationPatterns = (): {pattern: string, example: string}[] => {
+export const getCommonMisinformationPatterns = async (): Promise<{pattern: string, example: string}[]> => {
+  logger.debug('Returning mock misinformation patterns');
+  
+  // Always return mock data
+  return getStaticMisinformationPatterns();
+};
+
+/**
+ * Static misinformation patterns
+ */
+const getStaticMisinformationPatterns = (): {pattern: string, example: string}[] => {
   return [
     { 
       pattern: 'Manipulated media',

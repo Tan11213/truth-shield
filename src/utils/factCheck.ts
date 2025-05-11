@@ -63,26 +63,9 @@ export enum FactCheckErrorCode {
  */
 export const checkFact = async (claim: string, type: 'text' | 'image' | 'url' = 'text'): Promise<FactCheckResponse> => {
   try {
-    // Check for missing API keys
-    if (!process.env.REACT_APP_PERPLEXITY_API_KEY) {
-      logger.error('Perplexity API key is missing. This is required for fact-checking.');
-      return createErrorResponse(
-        FactCheckErrorCode.MISSING_API_KEY,
-        'Missing Perplexity API key. This is required for fact-checking.',
-        claim
-      );
-    }
-
-    // Make Gemini API key required for text fact checking
-    if (type === 'text' && !process.env.REACT_APP_GEMINI_API_KEY) {
-      logger.error('Gemini API key is missing. This is required for enhanced fact-checking.');
-      return createErrorResponse(
-        FactCheckErrorCode.MISSING_API_KEY,
-        'Missing Gemini API key. This is required for enhanced fact-checking.',
-        claim
-      );
-    }
-
+    // Frontend no longer needs to check for API keys since we're using our backend endpoints
+    // All API keys are now handled on the server side
+    
     let perplexityApiResult: PerplexityFactCheckResult;
 
     if (type === 'text') {

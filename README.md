@@ -1,6 +1,6 @@
 # TruthShield
 
-TruthShield is a modern fact-checking application designed to help users verify information in various formats including text, images, and URLs.
+TruthShield is a modern fact-checking application designed to help users verify information in various formats including text, images, and URLs. It uses a secure backend architecture with Vercel Serverless Functions to protect API keys.
 
 ## Features
 
@@ -8,11 +8,13 @@ TruthShield is a modern fact-checking application designed to help users verify 
 - **Image Analysis**: Upload images and extract text using Google Gemini 2.0 Flash for advanced OCR
 - **URL Verification**: Check the credibility of websites and social media posts
 - **Comprehensive Results**: Get detailed explanations, sources, and confidence levels
+- **Secure Architecture**: Backend serverless functions protect API keys and credentials 
 - **Cross-Platform**: Works on desktop and mobile browsers
 
 ## Technology Stack
 
-- React.js + TypeScript for the front-end
+- React.js + TypeScript for the frontend
+- Vercel Serverless Functions (Node.js) for backend API calls
 - Perplexity Llama-3.1-Sonar-Small-128k-Online model for fact-checking
 - Google Gemini 2.0 Flash for OCR and text extraction
 - Framer Motion for animations
@@ -25,9 +27,14 @@ TruthShield is a modern fact-checking application designed to help users verify 
    ```bash
    npm install
    ```
-3. Copy `.env.example` to `.env` and add your API keys:
-   ```bash
-   cp .env.example .env
+3. Create a `.env` file in the project root with the following structure:
+   ```
+   # API Keys - REQUIRED for functionality
+   PERPLEXITY_API_KEY=pplx-your_key_here
+   GEMINI_API_KEY=your_gemini_key_here
+   
+   # Frontend config
+   REACT_APP_DEBUG=true
    ```
 4. Start the development server:
    ```bash
@@ -40,47 +47,80 @@ To use all features of TruthShield, you need the following API keys:
 
 1. **Perplexity API Key**: For fact-checking and analysis
    - Get it from: https://www.perplexity.ai/settings/api
+   - **IMPORTANT**: Your key must start with `pplx-`
 
-2. **Google Gemini API Key**: For OCR and text extraction from images
+2. **Google Gemini API Key**: For preprocessing and content analysis
    - Get it from: https://aistudio.google.com/app/apikey
-   - Note: Although the API endpoint is named `gemini-1.5-flash-latest`, this is indeed the Gemini 2.0 Flash model.
 
-Add these keys to your `.env` file:
-
-```bash
-REACT_APP_PERPLEXITY_API_KEY=your_perplexity_api_key_here
-REACT_APP_GEMINI_API_KEY=your_gemini_api_key_here
-```
+Add these keys to your `.env` file as shown in the Installation section.
 
 ## Architecture
 
-TruthShield follows a modular architecture:
+TruthShield follows a secure architecture:
 
-- `components/`: UI components organized by feature
-- `services/`: API integration services for Perplexity and Gemini
-- `utils/`: Utility functions including OCR and logging
-- `pages/`: Main application pages
-- `docs/`: Documentation files
+- **Frontend**:
+  - `src/components/`: UI components organized by feature
+  - `src/services/`: API integration services that call backend endpoints
+  - `src/utils/`: Utility functions including logging
+  - `src/pages/`: Main application pages
 
-## OCR Implementation
+- **Backend** (Vercel Serverless Functions):
+  - `api/verify-fact.js`: Verifies text claims using Perplexity AI
+  - `api/analyze-web-content.js`: Analyzes URLs and web content
+  - `api/preprocess-content.js`: Preprocesses content using Gemini AI
+  - `api/logs.js`: Client-side logging endpoint
 
-TruthShield uses Google Gemini 2.0 Flash for OCR, which provides:
+This architecture ensures that API keys are never exposed in the client-side code.
 
-- High accuracy text extraction from complex layouts
-- Support for multiple languages
-- Automatic detection of social media platforms
-- Structured claim extraction for better fact-checking
-- Ability to extract text in different colors and formats (including blue links and highlighted text)
+## Deployment with Vercel
 
-For more information, see [OCR_TROUBLESHOOTING.md](./src/docs/OCR_TROUBLESHOOTING.md).
+TruthShield is optimized for deployment on Vercel. The project uses Vercel Serverless Functions to handle API calls that require API keys, avoiding exposure of sensitive credentials in the frontend code.
+
+### Important API Key Setup
+
+1. **LOCAL DEVELOPMENT**:
+   - Add your API keys to the `.env` file in the project root:
+   ```
+   PERPLEXITY_API_KEY=pplx-your_key_here
+   GEMINI_API_KEY=your_gemini_key_here
+   REACT_APP_DEBUG=true
+   ```
+   - Note that Perplexity API keys should start with `pplx-`
+
+2. **VERCEL DEPLOYMENT**:
+   - When deploying to Vercel, add your API keys as Environment Variables in the Vercel dashboard
+   - Go to your project settings → Environment Variables
+   - Add the following variables:
+     - `PERPLEXITY_API_KEY` - Your Perplexity API key (must start with pplx-)
+     - `GEMINI_API_KEY` - Your Google Gemini API key
+
+## Troubleshooting
+
+If you encounter any issues with the API endpoints:
+
+1. **API Key Format**: Ensure your Perplexity API key starts with `pplx-`
+2. **Environment Variables**: Verify that your API keys are correctly set in both local `.env` file and Vercel dashboard
+3. **Server Logs**: Check the server logs in the Vercel dashboard for any errors
+4. **Invalid API Key Errors**: If you receive "Authentication failed" errors, regenerate your API keys
+
+## Contributing
+
+Contributions are welcome! Please follow these steps:
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## License
 
 [MIT License](LICENSE)
 
-## Contributing
+---
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+For additional deployment information, see [PRODUCTION.md](./PRODUCTION.md).
+For OCR implementation details, see [OCR_TROUBLESHOOTING.md](./OCR_TROUBLESHOOTING.md).
 
 # Getting Started with Create React App
 

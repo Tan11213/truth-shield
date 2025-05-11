@@ -46,7 +46,7 @@ const HomePage: React.FC = () => {
         const data = await getTrendingMisinformation();
         setTrendingData(data);
         
-        const patternData = getCommonMisinformationPatterns();
+        const patternData = await getCommonMisinformationPatterns();
         setPatterns(patternData);
       } catch (error) {
         console.error('Error fetching trending data:', error);

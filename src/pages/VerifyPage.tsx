@@ -4,6 +4,7 @@ import FactCheckInput from '../components/factcheck/FactCheckInput';
 import FactCheckResult from '../components/factcheck/FactCheckResult';
 import { checkFact, FactCheckResponse } from '../utils/factCheck';
 import logger from '../utils/logger';
+import ApiKeyAlert from '../components/ApiKeyAlert';
 
 interface StoredVerifyData {
   type: string;
@@ -67,8 +68,19 @@ const VerifyPage: React.FC = () => {
       });
     } catch (err) {
       const error = err instanceof Error ? err : new Error('An unexpected error occurred');
+      
+      // Check if error is related to API key issues
+      const errorMessage = error.message;
+      if (errorMessage.includes('API key') || 
+          errorMessage.includes('Authentication') ||
+          errorMessage.includes('Perplexity') ||
+          errorMessage.includes('Invalid API')) {
+        setError(`API Configuration Error: ${errorMessage}`);
+      } else {
+        setError(errorMessage);
+      }
+      
       logger.reportError(error, 'VerifyPage.handleSubmit', { contentType: data.type });
-      setError(error.message);
     } finally {
       setIsProcessing(false);
     }
@@ -92,6 +104,9 @@ const VerifyPage: React.FC = () => {
               Our cutting-edge fact-checking system verifies content in real-time using multiple reliable sources.
             </p>
           </div>
+          
+          {/* API Key Alert */}
+          <ApiKeyAlert />
           
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div>
@@ -148,6 +163,16 @@ const VerifyPage: React.FC = () => {
                   <p className="text-gray-600 text-center max-w-md">
                     {error}
                   </p>
+                  {error.includes('API') && (
+                    <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-yellow-800">
+                      <p className="font-medium">API Configuration Required</p>
+                      <ol className="list-decimal list-inside mt-1">
+                        <li>Get a valid API key from <a href="https://www.perplexity.ai/settings/api" target="_blank" rel="noopener noreferrer" className="underline">Perplexity.ai</a></li>
+                        <li>Add it to your .env file as PERPLEXITY_API_KEY=pplx-...</li>
+                        <li>Restart the development server</li>
+                      </ol>
+                    </div>
+                  )}
                   <button 
                     className="mt-6 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                     onClick={() => setError(null)}
