@@ -30,7 +30,7 @@ const VerifyPage: React.FC = () => {
         
         if (timestamp > fiveMinutesAgo) {
           handleSubmit({
-            type: parsedData.type,
+            type: parsedData.type as 'text' | 'image' | 'url',
             content: parsedData.content
           });
           
@@ -49,7 +49,8 @@ const VerifyPage: React.FC = () => {
     
     try {
       // Use our fact-checking utility to verify the claim
-      const result = await checkFact(data.content);
+      const submissionType = data.type as 'text' | 'image' | 'url';
+      const result = await checkFact(data.content, submissionType);
       
       // If it's an image verification, add the image URL for display
       if (data.type === 'image' && data.file) {

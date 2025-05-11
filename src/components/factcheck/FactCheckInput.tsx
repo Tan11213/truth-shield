@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { extractTextFromImage } from '../../utils/ocr';
-import { FiUploadCloud, FiLink, FiMessageSquare, FiX, FiEdit2, FiLoader } from 'react-icons/fi';
-import { FaTwitter, FaFacebook, FaInstagram, FaReddit, FaYoutube } from 'react-icons/fa';
+import { extractTextFromImage, processSocialMediaScreenshot, generateSocialMediaFactCheckPrompt } from '../../utils/ocr';
+import { FiUploadCloud, FiLink, FiMessageSquare, FiX, FiEdit2, FiLoader, FiInfo } from 'react-icons/fi';
+import { FaTwitter, FaFacebook, FaInstagram, FaReddit, FaYoutube, FaCamera } from 'react-icons/fa';
+import logger from '../../utils/logger';
 
 interface FactCheckInputProps {
   onSubmit: (data: { type: string; content: string; file?: File }) => void;
@@ -48,6 +49,13 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
   const [extractedText, setExtractedText] = useState('');
   const [showExtractedText, setShowExtractedText] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showPlatformIndicator, setShowPlatformIndicator] = useState(false);
+  const [detectedPlatform, setDetectedPlatform] = useState<string | null>(null);
+  const [showImageError, setShowImageError] = useState(false);
+  const [imageError, setImageError] = useState('');
+  const [showUploading, setShowUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [claimText, setClaimText] = useState('');
   
   // When a file is added, process it with OCR
   useEffect(() => {
@@ -55,6 +63,27 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
       processImageWithOcr();
     }
   }, [file, activeTab]);
+  
+  // Ensure text is displayed after OCR processing completes
+  useEffect(() => {
+    // Check if OCR has just completed and we have extracted text
+    if (!isOcrProcessing && file && extractedText) {
+      // Ensure text area is visible
+      setShowExtractedText(true);
+      
+      // Direct DOM update to ensure the text is displayed
+      setTimeout(() => {
+        const textArea = document.getElementById('extracted-text') as HTMLTextAreaElement;
+        if (textArea) {
+          // Force value directly in DOM if needed
+          if (textArea.value !== extractedText) {
+            textArea.value = extractedText;
+            console.log('Forced text area update with extracted text of length:', extractedText.length);
+          }
+        }
+      }, 200);
+    }
+  }, [isOcrProcessing, file, extractedText]);
   
   // Detect social media platform from URL
   useEffect(() => {
@@ -77,19 +106,114 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
     }
   }, [urlInput]);
   
+  const retryOcr = () => {
+    if (file) {
+      setShowImageError(false);
+      setImageError('');
+      processImageWithOcr();
+    }
+  };
+  
   const processImageWithOcr = async () => {
     if (!file) return;
     
     try {
       setIsOcrProcessing(true);
-      const text = await extractTextFromImage(file);
-      setExtractedText(text);
+      setShowImageError(false);
+      setExtractedText('');
       setShowExtractedText(true);
+      // Reset detected platform for each new image
+      setDetectedPlatform(null);
+      setShowPlatformIndicator(false);
+      
+      let processedText = '';
+      const isScreenshot = file.name.toLowerCase().includes('screenshot');
+
+      // Simplified logic: Check if it's a social media screenshot, otherwise treat as general image
+      const isSocialMediaScreenshot = 
+        isScreenshot && (
+          file.name.toLowerCase().includes('twitter') ||
+          file.name.toLowerCase().includes('facebook') ||
+          file.name.toLowerCase().includes('instagram') ||
+          file.name.toLowerCase().includes('reddit')
+        );
+
+      if (isSocialMediaScreenshot) {
+        logger.info('Processing potential social media screenshot with general OCR');
+        try {
+          // processSocialMediaScreenshot internally calls extractTextFromImage (general OCR)
+          const screenshotData = await processSocialMediaScreenshot(file); 
+          processedText = screenshotData.text || '';
+          const prompt = generateSocialMediaFactCheckPrompt(screenshotData);
+          setClaimText(prompt);
+          if (screenshotData.platform) {
+            setDetectedPlatform(screenshotData.platform);
+            setShowPlatformIndicator(true);
+          }
+        } catch (socialMediaError) {
+          logger.error('Social media screenshot processing failed (after general OCR)', {
+            error: socialMediaError instanceof Error ? socialMediaError.message : String(socialMediaError)
+          });
+          setImageError(socialMediaError instanceof Error ? socialMediaError.message : 'Failed to process social media screenshot');
+          setShowImageError(true);
+          // Fall back to basic text extraction if social media specific logic fails
+          logger.info('Falling back to basic image text extraction for social media image.');
+          processedText = await extractTextFromImage(file);
+        }
+      } else {
+        // Standard extraction for all other images (including news, now handled generally)
+        logger.info('Processing general image/screenshot with general OCR');
+        processedText = await extractTextFromImage(file);
+      }
+      
+      console.log('OCR completed with result (general):', {
+        textLength: processedText.length,
+        textSample: processedText.substring(0, 50),
+        isEmpty: !processedText.trim(),
+        isSocialMedia: isSocialMediaScreenshot // Keep this for logging clarity
+      });
+      
+      // Updated condition for minimal text
+      if (processedText.trim().length > 0 && processedText.trim().length < 10) {
+        logger.warn('OCR produced minimal text. Displaying as is.', { text: processedText });
+      } else if (!processedText.trim()) {
+        setImageError("No text detected in image. You can manually edit the text below or try a clearer image.");
+        setShowImageError(true);
+      }
+      
+      await new Promise(resolve => {
+        setExtractedText(processedText);
+        setShowExtractedText(true); // Ensure this is true
+        setTimeout(() => {
+          const textArea = document.getElementById('extracted-text') as HTMLTextAreaElement;
+          if (textArea && textArea.value !== processedText) {
+            textArea.value = processedText;
+            console.log('Force-updated textarea DOM (general) with text length:', processedText.length);
+          }
+          resolve(null);
+        }, 100);
+      });
     } catch (error) {
-      console.error('OCR processing error:', error);
-      alert('Failed to extract text from image. You can still submit the image for analysis or enter text manually.');
+      console.error('OCR processing error (general flow):', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to extract text from image.';
+      setImageError(errorMessage + "\n\nYou can try using a clearer image or manually enter the text.");
+      setShowImageError(true);
+      setExtractedText('');
+      setShowExtractedText(true);
     } finally {
       setIsOcrProcessing(false);
+      setShowUploading(false);
+    }
+  };
+  
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files && event.target.files[0]) {
+      const file = event.target.files[0];
+      setFile(file);
+      setShowUploading(true);
+      setSelectedFile(file);
+      
+      // The useEffect hook will trigger processImageWithOcr when the file state changes
     }
   };
   
@@ -125,32 +249,66 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
       onSubmit({ type: 'text', content: textInput });
     } else if (activeTab === 'url' && urlInput.trim()) {
       onSubmit({ type: 'url', content: urlInput });
-    } else if (activeTab === 'image' && file) {
-      // If we have extracted text, use that as the content to check
-      const contentToCheck = showExtractedText && extractedText.trim() 
-        ? extractedText 
-        : 'Image verification';
-        
-      onSubmit({ type: 'image', content: contentToCheck, file });
+    } else if (activeTab === 'image') {
+      // For image tab, always use the extracted text if available
+      if (file && extractedText.trim()) {
+        onSubmit({ type: 'text', content: extractedText });
+      } else if (file) {
+        // If no extracted text but we have an image, let the user know they need text
+        alert("Please wait for the OCR to complete or enter some text manually before verifying.");
+      }
     }
   };
   
   const isSubmitDisabled = () => {
     if (isProcessing || isOcrProcessing) return true;
-    if (activeTab === 'text') return !textInput.trim();
-    if (activeTab === 'url') return !urlInput.trim();
-    if (activeTab === 'image') return !file;
+    
+    if (activeTab === 'text') {
+      return !textInput.trim();
+    }
+    
+    if (activeTab === 'url') {
+      return !urlInput.trim();
+    }
+    
+    if (activeTab === 'image') {
+      // For image tab, require both a file and text to be extracted/entered
+      return !file || !extractedText.trim();
+    }
+    
     return true;
   };
 
+  const getSubmitButtonText = () => {
+    if (isProcessing) {
+      return (
+        <div className="flex items-center justify-center">
+          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          Verifying...
+        </div>
+      );
+    }
+    
+    if (activeTab === 'image' && file && extractedText.trim()) {
+      return 'Verify Extracted Text';
+    }
+    
+    return 'Verify Now';
+  };
+
   const getSocialMediaIcon = () => {
-    switch (socialMediaPlatform) {
+    // Removed 'news' case as platform detection is simplified to only social media types
+    switch (detectedPlatform) { // Rely only on detectedPlatform which is set for social media
       case 'twitter': return <FaTwitter className="text-[#1DA1F2]" />;
       case 'facebook': return <FaFacebook className="text-[#1877F2]" />;
       case 'instagram': return <FaInstagram className="text-[#E4405F]" />;
       case 'reddit': return <FaReddit className="text-[#FF4500]" />;
-      case 'youtube': return <FaYoutube className="text-[#FF0000]" />;
-      default: return <FiLink />;
+      // Removed YouTube as it's not part of social media screenshot processing above
+      // If URL tab handles YouTube separately, that logic is independent
+      default: return <FiLink />; // Default icon for URL tab or if no platform detected
     }
   };
 
@@ -221,6 +379,14 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
             
             {/* Image Input */}
             <div style={{ display: activeTab === 'image' ? 'block' : 'none' }}>
+              <motion.label 
+                htmlFor="image-input" 
+                className="block text-sm font-medium text-gray-700 mb-2"
+                variants={itemVariants}
+              >
+                Upload an image or screenshot to verify
+              </motion.label>
+              
               <motion.div 
                 className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all ${
                   isDragging 
@@ -241,7 +407,7 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
                   ref={fileInputRef}
                   className="hidden"
                   accept="image/*"
-                  onChange={handleFileChange}
+                  onChange={handleImageUpload}
                 />
                 
                 {file ? (
@@ -267,8 +433,17 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
                       onClick={(e) => {
                         e.stopPropagation();
                         setFile(null);
+                        setSelectedFile(null);
                         setExtractedText('');
                         setShowExtractedText(false);
+                        setImageError('');
+                        setShowImageError(false);
+                        setDetectedPlatform(null);
+                        setShowPlatformIndicator(false);
+                        setIsOcrProcessing(false);
+                        if (fileInputRef.current) {
+                          fileInputRef.current.value = '';
+                        }
                       }}
                       whileHover={{ scale: 1.05, backgroundColor: "#f9fafb" }}
                     >
@@ -283,49 +458,142 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
                     </div>
                     <p className="text-sm font-medium text-gray-700">Drag and drop an image, or click to browse</p>
                     <p className="text-xs text-gray-500 mt-1">Supported formats: JPG, PNG, GIF</p>
+                    <div className="mt-3 flex flex-wrap justify-center gap-2">
+                      <div className="flex items-center text-xs text-primary-600 bg-primary-50 px-2 py-1 rounded-full">
+                        <FaCamera className="mr-1" size={12} />
+                        Screenshots
+                      </div>
+                      <div className="flex items-center text-xs text-primary-600 bg-primary-50 px-2 py-1 rounded-full">
+                        <FaTwitter className="mr-1" size={12} />
+                        Twitter/X Posts
+                      </div>
+                      <div className="flex items-center text-xs text-primary-600 bg-primary-50 px-2 py-1 rounded-full">
+                        <FaFacebook className="mr-1" size={12} />
+                        Facebook Posts
+                      </div>
+                    </div>
                   </div>
                 )}
               </motion.div>
+              
+              <motion.p className="mt-2 text-xs text-gray-500" variants={itemVariants}>
+                Upload screenshots of social media posts, news articles, or any content you want to verify. Our system will analyze the image and extract text for fact-checking.
+              </motion.p>
             
-              {/* OCR Results */}
+              {/* OCR limitations information */}
+              <motion.div 
+                className="mt-3 p-2 bg-blue-50 border border-blue-100 rounded-md text-xs text-blue-700 flex items-start"
+                variants={itemVariants}
+              >
+                <FiInfo className="mt-0.5 mr-2 flex-shrink-0" />
+                <div>
+                  <p className="font-medium">Tesseract.js OCR Tips:</p>
+                  <ul className="mt-1 list-disc list-inside">
+                    <li>Use high-contrast images for best results</li>
+                    <li>Processing may take time for larger images</li>
+                    <li>Edit extracted text if needed before verification</li>
+                  </ul>
+                  <motion.a
+                    href="OCR_TROUBLESHOOTING.md"
+                    target="_blank"
+                    className="mt-1 inline-block text-blue-600 hover:text-blue-800 underline"
+                    whileHover={{ scale: 1.03 }}
+                  >
+                    View OCR Guide
+                  </motion.a>
+                </div>
+              </motion.div>
+            
+              {/* OCR Results - Only show the OCR processing status when loading, not a separate block */}
               {isOcrProcessing && (
                 <div className="mt-4 p-3 bg-blue-50 rounded-md flex items-center">
                   <div className="animate-spin h-5 w-5 text-blue-500 mr-3">
                     <FiLoader />
                   </div>
-                  <p className="text-sm text-blue-700">Analyzing image text...</p>
+                  <p className="text-sm text-blue-700">
+                    Analyzing image with Tesseract.js... This may take a minute for larger images.
+                  </p>
                 </div>
               )}
               
-              {showExtractedText && (
+              {/* OCR Error Display */}
+              {showImageError && (
                 <motion.div 
-                  className="mt-4 border border-gray-200 rounded-md p-3"
-                  initial={{ opacity: 0, y: 10 }}
+                  className="mt-4 p-3 bg-red-50 border border-red-100 rounded-lg text-red-600 text-sm"
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <div className="flex items-start">
+                    <FiInfo className="mt-0.5 mr-2 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="font-medium">Tesseract OCR Error</p>
+                      <p className="mt-1 text-red-500 whitespace-pre-line">{imageError}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {file && (
+                          <motion.button
+                            type="button"
+                            className="px-3 py-1 bg-red-100 hover:bg-red-200 text-red-700 rounded-md text-xs font-medium flex items-center"
+                            whileHover={{ scale: 1.03 }}
+                            whileTap={{ scale: 0.97 }}
+                            onClick={retryOcr}
+                          >
+                            <FiLoader className="mr-1" /> Retry OCR
+                          </motion.button>
+                        )}
+                        <motion.a
+                          href="OCR_TROUBLESHOOTING.md"
+                          target="_blank"
+                          className="px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-md text-xs font-medium flex items-center"
+                          whileHover={{ scale: 1.03 }}
+                          whileTap={{ scale: 0.97 }}
+                        >
+                          <FiInfo className="mr-1" /> View OCR Tips
+                        </motion.a>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+              
+              {/* Always show the textarea whenever we have a file, even during processing */}
+              {file && (
+                <motion.div 
+                  className="mt-4"
+                  initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3 }}
                 >
                   <div className="flex justify-between items-center mb-2">
-                    <h4 className="text-sm font-medium text-gray-700">Extracted Text:</h4>
-                    <MotionButton
-                      type="button"
-                      className="text-xs text-gray-500 hover:text-gray-700 flex items-center"
-                      onClick={() => setShowExtractedText(!showExtractedText)}
-                      whileHover={{ scale: 1.05 }}
-                    >
-                      <FiEdit2 size={12} className="mr-1" />
-                      Edit
-                    </MotionButton>
+                    <label htmlFor="extracted-text" className="block text-sm font-medium text-gray-700">
+                      {imageError 
+                        ? "Enter or edit text for verification" 
+                        : isOcrProcessing 
+                          ? "Extracting text..." 
+                          : "Extracted text (edit if needed)"}
+                    </label>
+                    <div className="text-xs text-gray-500 flex items-center">
+                      <FiEdit2 className="mr-1" /> Editable
+                    </div>
                   </div>
-                  <MotionTextArea 
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm"
+                  <MotionTextArea
+                    id="extracted-text"
+                    rows={6}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
+                    placeholder={isOcrProcessing ? "Extracting text..." : "Extracted text will appear here. You can edit it before verification."}
                     value={extractedText}
                     onChange={(e) => setExtractedText(e.target.value)}
-                    whileFocus={{ scale: 1.01 }}
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    You can edit the extracted text if needed for more accurate results.
-                  </p>
+                    variants={itemVariants}
+                    whileFocus={{ scale: 1.01, boxShadow: "0 0 0 3px rgba(59, 130, 246, 0.1)" }}
+                    disabled={isOcrProcessing}
+                    key={`textarea-${file?.name || 'no-file'}-${isOcrProcessing ? 'processing' : 'idle'}`}
+                  ></MotionTextArea>
+                  
+                  {process.env.NODE_ENV !== 'production' && (
+                    <div className="text-xs text-gray-400 mt-1">
+                      Text length: {extractedText.length} chars | Processing: {isOcrProcessing ? 'Yes' : 'No'}
+                    </div>
+                  )}
                 </motion.div>
               )}
             </div>
@@ -398,30 +666,22 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
             className="mt-6"
             variants={itemVariants}
           >
-            <MotionButton
-              type="submit"
-              className={`w-full py-3 px-4 rounded-lg font-medium focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-all ${
-                isSubmitDisabled() 
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                  : 'bg-primary-600 text-white hover:bg-primary-700'
-              }`}
-              disabled={isSubmitDisabled()}
-              variants={buttonVariants}
-              whileHover={!isSubmitDisabled() ? "hover" : undefined}
-              whileTap={!isSubmitDisabled() ? "tap" : undefined}
-            >
-              {isProcessing ? (
-                <div className="flex items-center justify-center">
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Verifying...
-                </div>
-              ) : (
-                'Verify Now'
-              )}
-            </MotionButton>
+            <div className="relative">
+              <MotionButton
+                type="submit"
+                className={`w-full py-3 px-4 rounded-lg font-medium focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-all ${
+                  isSubmitDisabled() 
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                    : 'bg-primary-600 text-white hover:bg-primary-700'
+                }`}
+                disabled={isSubmitDisabled()}
+                variants={buttonVariants}
+                whileHover={!isSubmitDisabled() ? "hover" : undefined}
+                whileTap={!isSubmitDisabled() ? "tap" : undefined}
+              >
+                {getSubmitButtonText()}
+              </MotionButton>
+            </div>
           </motion.div>
         </form>
       </motion.div>
@@ -429,4 +689,4 @@ const FactCheckInput: React.FC<FactCheckInputProps> = ({ onSubmit, isProcessing 
   );
 };
 
-export default FactCheckInput; 
+export default FactCheckInput;

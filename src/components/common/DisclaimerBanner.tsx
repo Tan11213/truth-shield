@@ -44,7 +44,7 @@ const DisclaimerBanner: React.FC<DisclaimerBannerProps> = ({
               </h3>
               <div className={bannerClasses.text}>
                 <p>
-                  TruthShield provides evidence-based analysis from trusted sources. Our AI-assisted verification offers confidence assessments rather than absolute claims. We recommend cross-verification with multiple credible sources for critical information.
+                  TruthShield provides evidence-based analysis from trusted sources. We recommend cross-verification with multiple credible sources for critical information.
                 </p>
               </div>
             </div>

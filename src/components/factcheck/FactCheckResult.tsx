@@ -11,16 +11,16 @@ import {
   FaWhatsapp, 
   FaLink,
   FaArrowLeft,
-  FaBug,
-  FaQuoteRight,
   FaDownload,
   FaShare,
-  FaCertificate
+  FaCertificate,
+  FaFlag
 } from 'react-icons/fa';
 import QRCode from 'qrcode.react';
 import logger from '../../utils/logger';
 import { saveAs } from 'file-saver';
 import DisclaimerBanner from '../common/DisclaimerBanner';
+import ReportForm from '../common/ReportForm';
 
 interface FactCheckResultProps {
   result: FactCheckResponse;
@@ -95,6 +95,41 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, width =
   );
 };
 
+/**
+ * Format explanation text - Process markdown-style formatting and source citations
+ * @param text The explanation text to format
+ * @param sources Array of sources that might be referenced in the text
+ * @returns React elements with formatted text and linked citations
+ */
+const formatExplanation = (text: string, sources: { name: string, url: string }[]) => {
+  if (!text) return null;
+  
+  // First, replace ** bold ** with styled spans
+  let formattedText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  
+  // Then, replace citation numbers [1], [2], etc. with linked references
+  // but only if we have corresponding sources
+  const sourceMap = new Map();
+  sources.forEach(source => {
+    const match = source.name.match(/\[(\d+)\]/);
+    if (match && match[1]) {
+      sourceMap.set(match[1], source);
+    }
+  });
+  
+  // Replace citation markers with links to source entries
+  formattedText = formattedText.replace(/\[(\d+)\]/g, (match, number) => {
+    const source = sourceMap.get(number);
+    if (source) {
+      return `<a href="${source.url}" target="_blank" rel="noopener noreferrer" class="text-primary-600 hover:underline">[${number}]</a>`;
+    }
+    return match; // Keep as is if no matching source
+  });
+  
+  // Return as HTML
+  return <div dangerouslySetInnerHTML={{ __html: formattedText }} />;
+};
+
 const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnother }) => {
   const [copied, setCopied] = useState(false);
   const [showQRCode, setShowQRCode] = useState(false);
@@ -109,7 +144,7 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
   const [showVerificationProof, setShowVerificationProof] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
   
-  const qrCodeRef = useRef<HTMLDivElement>(null);
+  const qrRef = useRef<HTMLDivElement>(null);
   
   // Map FactCheckResponse verdict to UI components VerificationStatus
   const getVerdict = (): 'true' | 'false' | 'partial' | 'unverified' => {
@@ -183,27 +218,17 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
   };
   
   const downloadQRCode = () => {
-    if (qrCodeRef.current) {
-      const svg = qrCodeRef.current.querySelector('svg');
-      if (svg) {
-        const svgData = new XMLSerializer().serializeToString(svg);
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        const img = new Image();
-        
-        img.onload = () => {
-          canvas.width = img.width;
-          canvas.height = img.height;
-          ctx?.drawImage(img, 0, 0);
-          
-          canvas.toBlob((blob) => {
-            if (blob) {
-              saveAs(blob, `truthshield-factcheck-${result.id}.png`);
-            }
-          });
-        };
-        
-        img.src = 'data:image/svg+xml;base64,' + btoa(svgData);
+    if (qrRef.current) {
+      const canvas = qrRef.current.querySelector('canvas');
+      if (canvas) {
+        canvas.toBlob((blob) => {
+          if (blob) {
+            saveAs(blob, `truthshield-verification-${result.id}.png`);
+            
+            // Log the QR code download
+            logger.info('QR code downloaded', { resultId: result.id });
+          }
+        });
       }
     }
   };
@@ -253,9 +278,39 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
     }));
   };
   
-  const truncatedExplanation = result.explanation.length > 150 ? 
+  // Modified truncated explanation handling to preserve formatting
+  const truncatedText = result.explanation.length > 150 ? 
     result.explanation.substring(0, 150) + "..." : 
     result.explanation;
+
+  // Log that the result was viewed
+  React.useEffect(() => {
+    logger.info('Fact check result viewed', { 
+      resultId: result.id,
+      verdict: result.verdict
+    });
+  }, [result.id, result.verdict]);
+
+  // Handle QR code download
+  const handleDownloadQR = () => {
+    try {
+      if (qrRef.current) {
+        const canvas = qrRef.current.querySelector('canvas');
+        if (canvas) {
+          canvas.toBlob((blob) => {
+            if (blob) {
+              saveAs(blob, `truthshield-verification-${result.id}.png`);
+              
+              // Log the QR code download
+              logger.info('QR code downloaded', { resultId: result.id });
+            }
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to download QR code:', error);
+    }
+  };
 
   return (
     <div className="w-full max-w-3xl mx-auto">
@@ -325,7 +380,10 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
               whileHover={{ boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)" }}
             >
               <div className="text-gray-800">
-                {!showFullExplanation ? truncatedExplanation : result.explanation}
+                {!showFullExplanation ? 
+                  formatExplanation(truncatedText, result.sources) : 
+                  formatExplanation(result.explanation, result.sources)
+                }
               </div>
               {result.explanation.length > 150 && (
                 <MotionButton 
@@ -407,7 +465,7 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
             </motion.div>
           )}
           
-          {/* Verification Proof Section */}
+          {/* Verification Certificate Section */}
           <AnimatePresence>
             {showVerificationProof && (
               <MotionDiv
@@ -524,8 +582,8 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
               >
-                <FaBug size={14} />
-                Report Issue
+                <FaFlag size={14} />
+                Report
               </MotionButton>
               <MotionButton 
                 className="text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1.5 transition-colors"
@@ -629,94 +687,14 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
       
       {/* Report Issue Modal */}
       <AnimatePresence>
-        <Modal
-          isOpen={showReportForm}
-          onClose={() => setShowReportForm(false)}
-          title="Report an Issue"
-        >
-          <form onSubmit={handleReportSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="issueType" className="block text-sm font-medium text-gray-700 mb-1">
-                Issue Type
-              </label>
-              <motion.select
-                id="issueType"
-                name="issueType"
-                value={reportData.issueType}
-                onChange={handleReportInputChange}
-                className="w-full rounded-md border border-gray-300 shadow-sm py-2 px-3 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
-                required
-                whileFocus={{ scale: 1.01 }}
-                whileHover={{ scale: 1.01 }}
-              >
-                <option value="incorrect_result">Incorrect Fact-Check Result</option>
-                <option value="outdated_info">Outdated Information</option>
-                <option value="missing_context">Missing Important Context</option>
-                <option value="unreliable_source">Unreliable Source</option>
-                <option value="technical_error">Technical Error</option>
-                <option value="other">Other Issue</option>
-              </motion.select>
-            </div>
-            
-            <div>
-              <label htmlFor="message" className="block text-sm font-medium text-gray-700 mb-1">
-                Message (Please describe the issue)
-              </label>
-              <motion.textarea
-                id="message"
-                name="message"
-                rows={3}
-                value={reportData.message}
-                onChange={handleReportInputChange}
-                className="w-full rounded-md border border-gray-300 shadow-sm py-2 px-3 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
-                placeholder="Please provide details about the issue..."
-                required
-                whileFocus={{ scale: 1.01 }}
-                whileHover={{ scale: 1.01 }}
-              ></motion.textarea>
-            </div>
-            
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                Your Email (optional)
-              </label>
-              <motion.input
-                type="email"
-                id="email"
-                name="email"
-                value={reportData.email}
-                onChange={handleReportInputChange}
-                className="w-full rounded-md border border-gray-300 shadow-sm py-2 px-3 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
-                placeholder="Enter your email if you'd like us to respond"
-                whileFocus={{ scale: 1.01 }}
-                whileHover={{ scale: 1.01 }}
-              />
-              <p className="mt-1 text-xs text-gray-500">
-                We'll only use this to follow up on your report if necessary.
-              </p>
-            </div>
-            
-            <div className="flex space-x-3 pt-2">
-              <MotionButton
-                type="submit"
-                className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                Submit Report
-              </MotionButton>
-              <MotionButton
-                type="button"
-                onClick={() => setShowReportForm(false)}
-                className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                Cancel
-              </MotionButton>
-            </div>
-          </form>
-        </Modal>
+        {showReportForm && (
+          <ReportForm 
+            onClose={() => setShowReportForm(false)}
+            contentId={result.id}
+            contentType="fact_check"
+            contentPreview={`Claim: ${result.claim.substring(0, 100)}... Verdict: ${result.verdict}`}
+          />
+        )}
       </AnimatePresence>
     </div>
   );
