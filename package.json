@@ -15,6 +15,7 @@
     "framer-motion": "^12.10.5",
     "next": "^15.3.2",
     "node": "^24.0.1",
+    "nodemailer": "^7.0.3",
     "qrcode.react": "^3.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -60,6 +61,7 @@
   "devDependencies": {
     "@types/file-saver": "^2.0.7",
     "@types/node": "^22.15.17",
+    "@types/nodemailer": "^6.4.17",
     "@vercel/node": "^5.1.16",
     "autoprefixer": "^10.4.16",
     "cross-env": "^7.0.3",

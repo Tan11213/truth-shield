@@ -439,6 +439,21 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
       [name]: value
     }));
   };
+  
+  // Function to handle reporting
+  const handleReport = () => {
+    // Prepare detailed content preview with full result details
+    const detailedData = {
+      claim: result.claim,
+      verdict: result.verdict,
+      explanation: result.explanation,
+      sources: result.sources.map(source => source.name).join(', '),
+      timestamp: result.timestamp
+    };
+    
+    // Open report form with complete data
+    setShowReportForm(true);
+  };
 
   // Log that the result was viewed
   React.useEffect(() => {
@@ -782,7 +797,7 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
               </MotionButton>
               <MotionButton 
                 className="text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1.5 transition-colors"
-                onClick={() => setShowReportForm(true)}
+                onClick={handleReport}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
               >
@@ -896,7 +911,14 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
             onClose={() => setShowReportForm(false)}
             contentId={result.id}
             contentType="fact_check"
-            contentPreview={`Claim: ${result.claim.substring(0, 100)}... Verdict: ${result.verdict}`}
+            contentPreview={`Claim: ${result.claim.substring(0, 100)}... | Verdict: ${result.verdict} | ID: ${result.id}`}
+            fullData={{
+              claim: result.claim,
+              verdict: result.verdict,
+              explanation: result.explanation,
+              sources: result.sources.map(source => source.name).join(', '),
+              timestamp: result.timestamp
+            }}
           />
         )}
       </AnimatePresence>

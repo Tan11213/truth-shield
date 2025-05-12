@@ -553,8 +553,66 @@ const parseFactCheckResponse = (apiResponse) => {
   }
 };
 
+/**
+ * Simple logging utility for API endpoints
+ */
+const log = {
+  info: (message, data) => {
+    console.log(`[INFO] ${message}`, data || '');
+  },
+  warn: (message, data) => {
+    console.warn(`[WARN] ${message}`, data || '');
+  },
+  error: (message, error) => {
+    console.error(`[ERROR] ${message}`, error || '');
+  }
+};
+
+/**
+ * Validates the incoming request
+ */
+const validateRequest = (req) => {
+  // Check if request method is allowed
+  if (req.method !== 'POST') {
+    return {
+      valid: false,
+      error: 'Method not allowed',
+      status: 405
+    };
+  }
+
+  // Check if request body is present
+  if (!req.body) {
+    return {
+      valid: false,
+      error: 'Request body is missing',
+      status: 400
+    };
+  }
+
+  return { valid: true };
+};
+
+/**
+ * Format error response for API endpoints
+ */
+const formatErrorResponse = (response, error, userMessage) => {
+  const status = error.status || 500;
+  const message = userMessage || 'An error occurred while processing your request';
+  
+  log.error(message, error);
+  
+  return response.status(status).json({
+    error: message,
+    details: process.env.NODE_ENV === 'development' ? error.message : undefined
+  });
+};
+
 module.exports = {
   summarizeText,
   extractClaims,
-  parseFactCheckResponse
+  parseFactCheckResponse,
+  log,
+  validateRequest,
+  formatErrorResponse
 }; 
