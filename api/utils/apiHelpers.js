@@ -177,20 +177,40 @@ const parseFactCheckResponse = (apiResponse) => {
       if (explanationSection && explanationSection[1].trim().length > 20) {
         explanation = explanationSection[1].trim();
       } else {
-        // Fall back to the full response text to ensure we have content
-        explanation = responseText;
+        // Fall back to the full response text but remove sources section
+        const withoutSources = responseText.split(/\*\*SOURCES\*\*|\[SOURCES\]|SOURCES:/i)[0];
+        explanation = withoutSources || responseText;
       }
     } else {
-      // If no formal sections, use the whole response
-      explanation = responseText;
+      // If no formal sections, use the whole response but remove sources section if present
+      const withoutSources = responseText.split(/\*\*SOURCES\*\*|\[SOURCES\]|SOURCES:/i)[0];
+      explanation = withoutSources || responseText;
     }
     
     // Make sure explanation is not empty or too short
     if (!explanation || explanation.trim().length < 20) {
-      explanation = responseText;
+      // Try to get just the content before sources
+      const withoutSources = responseText.split(/\*\*SOURCES\*\*|\[SOURCES\]|SOURCES:/i)[0];
+      explanation = withoutSources || responseText;
     }
+
+    // Clean and simplify explanation format
+    let cleanExplanation = explanation;
     
-    console.log('[API Helper] Extracted explanation length:', explanation.length);
+    // Add proper line breaks and remove excessive formatting
+    cleanExplanation = cleanExplanation
+      .replace(/\n\s*\n/g, '\n') // Remove multiple empty lines
+      .replace(/\*\*/g, '') // Remove markdown ** formatting
+      .replace(/^#+\s+/gm, '') // Remove markdown headers
+      .trim();
+    
+    // DO NOT remove reference numbers - we'll keep them for linking
+    // Only clean up extra spaces
+    cleanExplanation = cleanExplanation
+      .replace(/\s{2,}/g, ' ') // Replace multiple spaces with a single space
+      .trim();
+      
+    console.log('[API Helper] Extracted explanation length:', cleanExplanation.length);
 
     // Enhanced source extraction
     let sources = [];
@@ -204,8 +224,8 @@ const parseFactCheckResponse = (apiResponse) => {
     if (apiResponse.citations && Array.isArray(apiResponse.citations) && apiResponse.citations.length > 0) {
       console.log('[API Helper] Found citations array with', apiResponse.citations.length, 'entries');
       
-      // Look for numbered references in the explanation text
-      const referenceMatches = explanation.match(/\[(\d+)\]/g) || [];
+      // Look for numbered references in the original text, not the cleaned explanation
+      const referenceMatches = responseText.match(/\[(\d+)\]/g) || [];
       const references = referenceMatches.map(ref => parseInt(ref.replace(/[\[\]]/g, '')));
       
       // Create a map of reference numbers to URLs
@@ -264,6 +284,7 @@ const parseFactCheckResponse = (apiResponse) => {
           }
           
           // Add to sources with the URL from the reference map or the one found directly
+          // Don't prefix with [refNumber] since that will be handled by the frontend
           sources.push({
             title: description || `Source ${refNumber}`,
             url: url || referenceMap[refNumber] || '',
@@ -343,7 +364,7 @@ const parseFactCheckResponse = (apiResponse) => {
             const description = refMatch[2].trim() || `Source ${refNumber}`;
             
             sources.push({
-              title: `[${refNumber}] ${description}`,
+              title: description,
               url: '',
               refNumber: parseInt(refNumber)
             });
@@ -367,17 +388,18 @@ const parseFactCheckResponse = (apiResponse) => {
       return 0;
     });
     
+    // Create a map of reference numbers to source info for frontend linking
+    const sourceRefs = {};
+    sources.forEach(source => {
+      if (source.refNumber) {
+        sourceRefs[source.refNumber] = {
+          url: source.url,
+          title: source.title
+        };
+      }
+    });
+    
     console.log('[API Helper] Extracted', sources.length, 'sources');
-    
-    // Clean and simplify explanation format
-    let cleanExplanation = explanation;
-    
-    // Add proper line breaks and remove excessive formatting
-    cleanExplanation = cleanExplanation
-      .replace(/\n\s*\n/g, '\n') // Remove multiple empty lines
-      .replace(/\*\*/g, '') // Remove markdown ** formatting
-      .replace(/^#+\s+/gm, '') // Remove markdown headers
-      .trim();
     
     // Additional analysis: Check for propaganda indicators
     const propagandaIndicators = [];
@@ -412,6 +434,7 @@ const parseFactCheckResponse = (apiResponse) => {
       isPartiallyTrue,
       explanation: cleanExplanation,
       sources,
+      sourceRefs,
       propagandaIndicators: propagandaIndicators.length > 0 ? propagandaIndicators : undefined,
       sourceBalance: {
         hasMultipleSources,
