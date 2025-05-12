@@ -463,14 +463,28 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
       verdict: result.verdict
     });
     
-    // Auto-scroll to the result component on mobile devices
-    if (resultRef.current && window.innerWidth <= 768) {
+    // Auto-scroll to the result component on all devices
+    if (resultRef.current) {
       // Use a small timeout to ensure the component is fully rendered
       setTimeout(() => {
-        resultRef.current?.scrollIntoView({ 
-          behavior: 'smooth', 
-          block: 'start'
-        });
+        // Check if the element is not visible in viewport
+        if (resultRef.current) {
+          const rect = resultRef.current.getBoundingClientRect();
+          const isVisible = (
+            rect.top >= 0 &&
+            rect.left >= 0 &&
+            rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+            rect.right <= (window.innerWidth || document.documentElement.clientWidth)
+          );
+          
+          // Only scroll if the element is not fully visible
+          if (!isVisible && resultRef.current) {
+            resultRef.current.scrollIntoView({ 
+              behavior: 'smooth', 
+              block: 'start'
+            });
+          }
+        }
       }, 300);
     }
   }, [result.id, result.verdict]);
