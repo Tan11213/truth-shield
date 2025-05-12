@@ -171,15 +171,32 @@ const parseFactCheckResponse = (apiResponse) => {
     let explanation = "";
     let summary = "";
     
-    // Try to extract summary section first
+    // Try to extract summary section first - give this higher priority
     const summarySection = responseText.match(/(?:\*\*SUMMARY\*\*|\[SUMMARY\]|SUMMARY:)([\s\S]*?)(?=\*\*|\[|$)/i);
     if (summarySection && summarySection[1].trim().length > 10) {
       summary = summarySection[1].trim();
+      console.log('[API Helper] Found explicit summary section, length:', summary.length);
     } else {
-      // If no explicit summary, try to create one from the first few sentences of the explanation
-      const firstParagraph = responseText.split(/\n\n/)[0];
-      if (firstParagraph && firstParagraph.length > 30 && firstParagraph.length < 500) {
-        summary = firstParagraph.replace(/\*\*VERDICT\*\*|\[VERDICT\]|VERDICT:/gi, "").trim();
+      // Try to extract from the first part of response, before explanation
+      const parts = responseText.split(/(?:\*\*EXPLANATION\*\*|\[EXPLANATION\]|EXPLANATION:)/i);
+      if (parts.length > 1) {
+        // Get the text between verdict and explanation
+        const beforeExplanation = parts[0];
+        const afterVerdict = beforeExplanation.split(/(?:\*\*VERDICT\*\*|\[VERDICT\]|VERDICT:)/i)[1] || beforeExplanation;
+        
+        if (afterVerdict && afterVerdict.trim().length > 20 && afterVerdict.trim().length < 500) {
+          summary = afterVerdict.trim();
+          console.log('[API Helper] Extracted implicit summary from text between verdict and explanation, length:', summary.length);
+        }
+      }
+      
+      // If still no summary, try to use the first paragraph of explanation
+      if (!summary || summary.length < 20) {
+        const firstParagraph = explanation.split(/\n\n/)[0] || responseText.split(/\n\n/)[0];
+        if (firstParagraph && firstParagraph.length > 30 && firstParagraph.length < 400) {
+          summary = firstParagraph.replace(/\*\*VERDICT\*\*|\[VERDICT\]|VERDICT:/gi, "").trim();
+          console.log('[API Helper] Created summary from first paragraph, length:', summary.length);
+        }
       }
     }
     
@@ -246,12 +263,38 @@ const parseFactCheckResponse = (apiResponse) => {
       .replace(/^#+\s+/gm, '')
       .replace(/\s{2,}/g, ' ')
       .trim();
+    
+    // Look for [1], [2], etc., and remove them from the summary
+    cleanSummary = cleanSummary
+      .replace(/\[\d+\]/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+      
+    // Ensure the summary starts with a capital letter and ends with a period
+    if (cleanSummary.length > 0) {
+      cleanSummary = cleanSummary.charAt(0).toUpperCase() + cleanSummary.slice(1);
+      if (!cleanSummary.match(/[.!?]$/)) {
+        cleanSummary += '.';
+      }
+    }
       
     if (cleanSummary.length < 20 || cleanSummary.length > 500) {
       // If summary is too short or too long, generate a new one from the first part of explanation
       const sentences = cleanExplanation.split(/(?<=[.!?])\s+/);
       if (sentences.length > 1) {
-        cleanSummary = sentences.slice(0, Math.min(2, sentences.length)).join(' ');
+        cleanSummary = sentences.slice(0, Math.min(3, sentences.length)).join(' ');
+        
+        // Clean up the generated summary
+        cleanSummary = cleanSummary
+          .replace(/\[\d+\]/g, '')
+          .replace(/\s{2,}/g, ' ')
+          .trim();
+          
+        // Ensure it starts with a capital letter and ends with a period
+        cleanSummary = cleanSummary.charAt(0).toUpperCase() + cleanSummary.slice(1);
+        if (!cleanSummary.match(/[.!?]$/)) {
+          cleanSummary += '.';
+        }
       } else {
         cleanSummary = cleanExplanation.substring(0, Math.min(300, cleanExplanation.length));
       }

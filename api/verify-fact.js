@@ -116,12 +116,14 @@ module.exports = (req, res) => {
 
          Provide:
          1. A clear verdict: TRUE, FALSE, or PARTIALLY TRUE
-         2. A focused explanation with recent evidence and context
-         3. Numbered citations to reliable, recent sources
+         2. A concise summary (2-3 sentences) of your overall finding
+         3. A focused explanation with recent evidence and context
+         4. Numbered citations to reliable, recent sources
          
          Format:
          [VERDICT] TRUE/FALSE/PARTIALLY TRUE
-         [EXPLANATION] Your analysis with citations [1], [2]
+         [SUMMARY] Brief 2-3 sentence summary of your finding
+         [EXPLANATION] Your focused analysis with citations [1], [2]
          [SOURCES] 1. Source - URL
          
          Focus on the most recent events and information related to the claim.`
@@ -129,8 +131,9 @@ module.exports = (req, res) => {
 
         When analyzing multiple claims:
         1. Provide an overall verdict followed by verdicts for each specific claim
-        2. Prioritize recent events and latest information in your analysis
-        3. Use numbered citations and provide diverse sources
+        2. Include a concise summary (2-4 sentences) of your overall findings
+        3. Prioritize recent events and latest information in your analysis
+        4. Use numbered citations and provide diverse sources
         
         Format:
         [VERDICT]
@@ -138,8 +141,11 @@ module.exports = (req, res) => {
         - Claim 1: TRUE/FALSE/PARTIALLY TRUE
         - Claim 2: TRUE/FALSE/PARTIALLY TRUE
         
+        [SUMMARY]
+        Brief 2-4 sentence summary of your overall findings
+        
         [EXPLANATION]
-        Analysis with citations [1], [2], focusing on recent developments
+        analysis with citations [1], [2], focusing on recent developments
         
         [SOURCES]
         1. Source - URL (prioritize recent sources)
