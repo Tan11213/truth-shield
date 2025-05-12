@@ -29,6 +29,7 @@
   },
   "scripts": {
     "start": "react-scripts start",
+    "dev": "vercel dev",
     "build": "react-scripts build",
     "build:production": "GENERATE_SOURCEMAP=false react-scripts build",
     "build:analyze": "ANALYZE=true react-scripts build",

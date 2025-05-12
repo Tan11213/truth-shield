@@ -14,13 +14,18 @@ import {
   FaDownload,
   FaShare,
   FaCertificate,
-  FaFlag
+  FaFlag,
+  FaQrcode,
+  FaChevronUp,
+  FaChevronDown
 } from 'react-icons/fa';
 import QRCode from 'qrcode.react';
 import logger from '../../utils/logger';
-import { saveAs } from 'file-saver';
 import DisclaimerBanner from '../common/DisclaimerBanner';
 import ReportForm from '../common/ReportForm';
+
+// Add styles for explanation content
+import './FactCheckStyles.css';
 
 interface FactCheckResultProps {
   result: FactCheckResponse;
@@ -104,37 +109,84 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, width =
 const formatExplanation = (text: string, sources: { name: string, url: string }[]) => {
   if (!text) return null;
   
-  // First, replace ** bold ** with styled spans
-  let formattedText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  let formattedText = text;
   
-  // Then, replace citation numbers [1], [2], etc. with linked references
-  // but only if we have corresponding sources
-  const sourceMap = new Map();
-  sources.forEach(source => {
-    const match = source.name.match(/\[(\d+)\]/);
-    if (match && match[1]) {
-      sourceMap.set(match[1], source);
+  // Create a clear verdict section if needed
+  const verdictMatch = formattedText.match(/(?:^|\n)(?:VERDICT|Overall):\s*([^\n]+)/i);
+  if (verdictMatch) {
+    const verdict = verdictMatch[1].trim();
+    let verdictClass = '';
+    
+    if (verdict.toLowerCase().includes('true') && !verdict.toLowerCase().includes('false')) {
+      verdictClass = 'text-true-600 font-semibold';
+    } else if (verdict.toLowerCase().includes('false')) {
+      verdictClass = 'text-false-600 font-semibold';
+    } else if (verdict.toLowerCase().includes('partial')) {
+      verdictClass = 'text-partial-600 font-semibold';
     }
+    
+    // Replace the verdict line with formatted version
+    formattedText = formattedText.replace(
+      verdictMatch[0], 
+      `<div class="verdict-summary mb-3"><span class="font-medium">Verdict:</span> <span class="${verdictClass}">${verdict}</span></div>`
+    );
+  }
+  
+  // Format specific claims verdicts
+  formattedText = formattedText.replace(
+    /(?:^|\n)(?:Claim|Point)\s+(\d+):\s*([^\n]+)/gi,
+    '<div class="claim-verdict mb-2"><span class="font-medium">Claim $1:</span> <span class="$2-color">$2</span></div>'
+  );
+  
+  // Make claim numbers and sections stand out
+  formattedText = formattedText.replace(
+    /(?:^|\n)(\d+)\.\s+((?:[^\n])+)/g, 
+    '<p class="claim-point mb-2"><strong>$1.</strong> $2</p>'
+  );
+  
+  // Format paragraphs properly
+  formattedText = formattedText.replace(/\n\n+/g, '</p><p class="mb-2">');
+  formattedText = formattedText.replace(/\n(?!\n)/g, '<br>');
+  
+  // Add color highlighting for TRUE/FALSE/PARTIALLY TRUE verdicts
+  formattedText = formattedText
+    .replace(/\bTRUE\b/g, '<span class="text-true-600 font-semibold">TRUE</span>')
+    .replace(/\bFALSE\b/g, '<span class="text-false-600 font-semibold">FALSE</span>')
+    .replace(/\bPARTIALLY TRUE\b/g, '<span class="text-partial-600 font-semibold">PARTIALLY TRUE</span>');
+  
+  // Create a map of source references by index
+  const sourcesByIndex = new Map();
+  sources.forEach((source, index) => {
+    // Sources are 1-indexed in the text references
+    const refNumber = source.name.match(/\[(\d+)\]/) 
+      ? source.name.match(/\[(\d+)\]/)?.[1] 
+      : String(index + 1);
+    
+    sourcesByIndex.set(refNumber, source);
   });
   
-  // Replace citation markers with links to source entries
+  // Replace all citation references with linked versions
   formattedText = formattedText.replace(/\[(\d+)\]/g, (match, number) => {
-    const source = sourceMap.get(number);
-    if (source) {
-      return `<a href="${source.url}" target="_blank" rel="noopener noreferrer" class="text-primary-600 hover:underline">[${number}]</a>`;
+    const source = sourcesByIndex.get(number);
+    if (source && source.url) {
+      return `<a href="${source.url}" target="_blank" rel="noopener noreferrer" class="text-primary-600 hover:underline font-medium">[${number}]</a>`;
     }
     return match; // Keep as is if no matching source
   });
   
+  // Wrap in a paragraph if needed
+  if (!formattedText.startsWith('<p')) {
+    formattedText = `<p class="mb-2">${formattedText}</p>`;
+  }
+  
   // Return as HTML
-  return <div dangerouslySetInnerHTML={{ __html: formattedText }} />;
+  return <div dangerouslySetInnerHTML={{ __html: formattedText }} className="explanation-content" />;
 };
 
 const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnother }) => {
   const [copied, setCopied] = useState(false);
   const [showQRCode, setShowQRCode] = useState(false);
   const [showShareOptions, setShowShareOptions] = useState(false);
-  const [showFullExplanation, setShowFullExplanation] = useState(false);
   const [showReportForm, setShowReportForm] = useState(false);
   const [reportData, setReportData] = useState<ReportFormData>({
     issueType: 'incorrect_result',
@@ -143,8 +195,28 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
   });
   const [showVerificationProof, setShowVerificationProof] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
+  const [isExplanationExpanded, setIsExplanationExpanded] = useState(false);
   
   const qrRef = useRef<HTMLDivElement>(null);
+  
+  // Function to toggle explanation expansion
+  const toggleExplanation = () => {
+    setIsExplanationExpanded(!isExplanationExpanded);
+  };
+  
+  // Check if explanation is lengthy and should be collapsed
+  const isExplanationLengthy = result.explanation && result.explanation.length > 500;
+  
+  // Get shortened explanation for collapsed view
+  const getShortenedExplanation = () => {
+    if (!isExplanationLengthy || isExplanationExpanded) {
+      return result.explanation;
+    }
+    
+    // Find a good breaking point - end of a sentence near 500 characters
+    const breakPoint = result.explanation.substring(0, 500).lastIndexOf('.');
+    return breakPoint > 200 ? result.explanation.substring(0, breakPoint + 1) : result.explanation.substring(0, 500) + '...';
+  };
   
   // Map FactCheckResponse verdict to UI components VerificationStatus
   const getVerdict = (): 'true' | 'false' | 'partial' | 'unverified' => {
@@ -195,9 +267,16 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
     }
   };
   
+  // Generate a shareable link with the fact check ID and a hash
   const generateShareableLink = () => {
-    // In a real app, this would generate a unique, short URL
-    return `https://truthshield.org/fact-check/${result.id}`;
+    // Create a hash from the result content for verification
+    const contentHash = btoa(result.claim.substring(0, 30) + result.verdict).substring(0, 8);
+    
+    // In production, this would use your actual domain
+    const baseUrl = window.location.origin;
+    const shareUrl = `${baseUrl}/verify?id=${result.id}&h=${contentHash}`;
+    
+    return shareUrl;
   };
   
   const copyToClipboard = () => {
@@ -216,14 +295,29 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
       logger.reportError(error as Error, "FactCheckResult.copyToClipboard");
     }
   };
+
+  // Show QR code in a modal
+  const showQRCodeModal = () => {
+    setShowQRModal(true);
+  };
   
   const downloadQRCode = () => {
     if (qrRef.current) {
       const canvas = qrRef.current.querySelector('canvas');
       if (canvas) {
+        // Create a temporary link element
+        const link = document.createElement('a');
+        
+        // Convert canvas to blob and download
         canvas.toBlob((blob) => {
           if (blob) {
-            saveAs(blob, `truthshield-verification-${result.id}.png`);
+            const url = URL.createObjectURL(blob);
+            link.href = url;
+            link.download = `truthshield-verification-${result.id}.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
             
             // Log the QR code download
             logger.info('QR code downloaded', { resultId: result.id });
@@ -231,6 +325,11 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
         });
       }
     }
+  };
+  
+  // Additional button to replace the Certificate button
+  const openShareCertificate = () => {
+    setShowVerificationProof(true);
   };
   
   const handleReportSubmit = (e: React.FormEvent) => {
@@ -278,11 +377,6 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
     }));
   };
   
-  // Modified truncated explanation handling to preserve formatting
-  const truncatedText = result.explanation.length > 150 ? 
-    result.explanation.substring(0, 150) + "..." : 
-    result.explanation;
-
   // Log that the result was viewed
   React.useEffect(() => {
     logger.info('Fact check result viewed', { 
@@ -290,27 +384,6 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
       verdict: result.verdict
     });
   }, [result.id, result.verdict]);
-
-  // Handle QR code download
-  const handleDownloadQR = () => {
-    try {
-      if (qrRef.current) {
-        const canvas = qrRef.current.querySelector('canvas');
-        if (canvas) {
-          canvas.toBlob((blob) => {
-            if (blob) {
-              saveAs(blob, `truthshield-verification-${result.id}.png`);
-              
-              // Log the QR code download
-              logger.info('QR code downloaded', { resultId: result.id });
-            }
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Failed to download QR code:', error);
-    }
-  };
 
   return (
     <div className="w-full max-w-3xl mx-auto">
@@ -376,26 +449,44 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
           >
             <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Verdict</h3>
             <motion.div 
-              className="bg-white border rounded-md p-3"
+              className="bg-white border rounded-md p-6"
               whileHover={{ boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)" }}
             >
-              <div className="text-gray-800">
-                {!showFullExplanation ? 
-                  formatExplanation(truncatedText, result.sources) : 
-                  formatExplanation(result.explanation, result.sources)
-                }
+              <div className="flex items-center mb-4">
+                <div className={`h-8 w-8 rounded-full flex items-center justify-center mr-3 ${
+                  getVerdict() === 'true' ? 'bg-true-500' :
+                  getVerdict() === 'false' ? 'bg-false-500' :
+                  getVerdict() === 'partial' ? 'bg-partial-500' :
+                  'bg-gray-500'
+                }`}>
+                  {getStatusIcon()}
+                </div>
+                <h3 className="text-xl font-bold text-gray-900">{getStatusLabel()}</h3>
               </div>
-              {result.explanation.length > 150 && (
-                <MotionButton 
-                  onClick={() => setShowFullExplanation(!showFullExplanation)}
-                  className="mt-2 text-primary-600 w-full text-sm hover:underline"
-                  whileHover="hover"
-                  whileTap="tap"
-                  variants={buttonHoverVariants}
-                >
-                  {showFullExplanation ? "Show Less" : "Read Full Explanation"}
-                </MotionButton>
-              )}
+              
+              <div className="text-gray-800 explanation-content">
+                {formatExplanation(
+                  isExplanationLengthy && !isExplanationExpanded 
+                    ? getShortenedExplanation() 
+                    : result.explanation, 
+                  result.sources
+                )}
+                
+                {isExplanationLengthy && (
+                  <motion.button
+                    onClick={toggleExplanation}
+                    className="mt-4 text-primary-600 hover:text-primary-800 text-sm font-medium flex items-center"
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                  >
+                    {isExplanationExpanded ? (
+                      <>Show Less <FaChevronUp className="ml-1" size={12} /></>
+                    ) : (
+                      <>Read More <FaChevronDown className="ml-1" size={12} /></>
+                    )}
+                  </motion.button>
+                )}
+              </div>
             </motion.div>
           </motion.div>
           
@@ -408,23 +499,41 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
             >
               <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Sources</h3>
               <ol className="list-decimal pl-5 space-y-2 bg-gray-50 p-3 rounded-md">
-                {result.sources.map((source, index) => (
-                  <motion.li 
-                    key={index} 
-                    className="ml-1 py-1"
-                    whileHover="hover"
-                    variants={sourceItemVariants}
-                  >
-                    <a 
-                      href={source.url} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-primary-600 hover:underline text-sm hover:text-primary-800 transition-colors duration-200"
+                {result.sources.map((source, index) => {
+                  // Extract reference number if it exists in the title
+                  const refMatch = source.name.match(/\[(\d+)\]/) || [`[${index + 1}]`, String(index + 1)];
+                  const refNumber = refMatch[1];
+                  
+                  // Clean up title by removing reference number if present
+                  const cleanTitle = source.name.replace(/^\[(\d+)\]\s*-?\s*/, '').trim();
+                  
+                  return (
+                    <motion.li 
+                      key={index} 
+                      className="ml-1 py-1"
+                      whileHover="hover"
+                      variants={sourceItemVariants}
                     >
-                      {source.name}
-                    </a>
-                  </motion.li>
-                ))}
+                      {source.url ? (
+                        <a 
+                          href={source.url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-primary-600 hover:underline text-sm hover:text-primary-800 transition-colors duration-200"
+                        >
+                          <span className="font-medium">[{refNumber}]</span> {cleanTitle}
+                          <span className="block text-xs text-gray-500 ml-4 mt-1 truncate">
+                            {source.url.substring(0, 60)}{source.url.length > 60 ? '...' : ''}
+                          </span>
+                        </a>
+                      ) : (
+                        <span className="text-sm text-gray-700">
+                          <span className="font-medium">[{refNumber}]</span> {cleanTitle}
+                        </span>
+                      )}
+                    </motion.li>
+                  );
+                })}
               </ol>
             </motion.div>
           )}
@@ -465,88 +574,120 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
             </motion.div>
           )}
           
-          {/* Verification Certificate Section */}
+          {/* Verification Certificate */}
           <AnimatePresence>
             {showVerificationProof && (
-              <MotionDiv
-                initial={{ opacity: 0, y: 10, height: 0 }}
-                animate={{ opacity: 1, y: 0, height: 'auto' }}
-                exit={{ opacity: 0, y: 10, height: 0 }}
+              <MotionDiv 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
                 transition={{ duration: 0.3 }}
-                className="mt-6 p-4 bg-white rounded-lg border border-gray-200"
+                className="mt-4 bg-white rounded-xl border-2 border-gray-200 overflow-hidden"
               >
-                <div className="flex items-center space-x-2 mb-3">
-                  <motion.div
-                    whileHover="hover"
-                    variants={iconHoverVariants}
-                  >
-                    <FaCertificate className="text-primary-500" />
-                  </motion.div>
-                  <h3 className="text-base font-medium text-gray-700">Verification Certificate</h3>
-                </div>
-                
                 <motion.div 
-                  className="bg-gray-50 p-4 rounded-md mb-4"
-                  whileHover={{ boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)" }}
+                  className="p-4 sm:p-6 space-y-4"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5 }}
                 >
-                  <p className="text-sm text-gray-700 mb-2">
-                    This fact-check can be verified by anyone using the URL or QR code below. 
-                    Use this as proof when sharing verified information in discussions.
-                  </p>
-                  <div className="flex flex-col sm:flex-row items-center sm:items-start space-y-3 sm:space-y-0 sm:space-x-4">
-                    <motion.div 
-                      className="bg-white p-2 border border-gray-200 rounded-md"
-                      whileHover={{ scale: 1.05, rotate: 2 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      <QRCode value={generateShareableLink()} size={120} renderAs="svg" includeMargin={true} />
-                    </motion.div>
+                  <div className="text-center border-b border-gray-100 pb-4">
+                    <h3 className="text-lg font-bold text-gray-900">Verification Certificate</h3>
+                    <p className="text-sm text-gray-600">This certificate confirms that the following fact-check was performed by TruthShield.</p>
+                  </div>
+                  
+                  <div className="flex flex-col sm:flex-row gap-4">
                     <div className="flex-1">
-                      <div className="mb-2">
-                        <p className="text-xs text-gray-500 mb-1">Verification Link:</p>
-                        <div className="relative">
-                          <input 
-                            type="text" 
-                            readOnly 
-                            value={generateShareableLink()} 
-                            className="w-full text-sm bg-white border border-gray-200 rounded py-1 px-2 text-gray-700 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
-                            placeholder="Verification Link"
-                          />
-                          <motion.button
-                            onClick={copyToClipboard}
-                            className="absolute right-2 top-1/2 transform -translate-y-1/2 text-primary-500 hover:text-primary-700"
-                            whileHover={{ scale: 1.2 }}
-                            whileTap={{ scale: 0.9 }}
-                          >
-                            <FaLink size={14} />
-                          </motion.button>
+                      <div className="mb-4">
+                        <h4 className="text-sm font-medium text-gray-700 mb-1">Claim</h4>
+                        <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-md">
+                          {result.claim.length > 200 ? result.claim.substring(0, 200) + '...' : result.claim}
+                        </p>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-700 mb-1">Verdict</h4>
+                          <div className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                            getVerdict() === 'true' ? 'bg-true-100 text-true-800' :
+                            getVerdict() === 'false' ? 'bg-false-100 text-false-800' :
+                            getVerdict() === 'partial' ? 'bg-partial-100 text-partial-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {getStatusLabel()}
+                          </div>
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-700 mb-1">Date</h4>
+                          <p className="text-sm text-gray-600">
+                            {new Date().toLocaleDateString('en-US', { 
+                              year: 'numeric', 
+                              month: 'short', 
+                              day: 'numeric' 
+                            })}
+                          </p>
                         </div>
                       </div>
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1">How to use:</p>
-                        <ol className="list-decimal text-xs text-gray-700 pl-4">
-                          <li>Share this link or QR code when referencing this fact check</li>
-                          <li>Recipients can scan or click to verify the information directly</li>
-                          <li>All verification data is cryptographically timestamped and immutable</li>
-                        </ol>
+                      
+                      <div className="mb-4">
+                        <h4 className="text-sm font-medium text-gray-700 mb-1">Verification ID</h4>
+                        <p className="text-xs font-mono bg-gray-50 p-2 rounded-md border border-gray-200 break-all">
+                          {result.id}
+                        </p>
                       </div>
-                      <div className="mt-3 flex justify-end">
-                        <MotionButton
-                          onClick={downloadQRCode}
-                          className="text-xs bg-primary-50 text-primary-700 px-2 py-1 rounded flex items-center gap-1.5"
+                    </div>
+                    
+                    <div className="flex-1 flex flex-col items-center justify-center border-l border-gray-100 pl-4">
+                      <div ref={qrRef} className="mb-4">
+                        <QRCode 
+                          value={generateShareableLink()} 
+                          size={120}
+                          level="H"
+                          renderAs="canvas"
+                        />
+                      </div>
+                      
+                      <div className="w-full space-y-3">
+                        <motion.button
+                          onClick={showQRCodeModal}
+                          className="w-full bg-primary-600 text-white rounded-lg py-2 px-4 text-sm font-medium flex items-center justify-center gap-2"
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
                         >
-                          <FaDownload size={12} />
-                          Download QR
-                        </MotionButton>
+                          <FaQrcode size={16} />
+                          Show Full QR Code
+                        </motion.button>
+                        
+                        <motion.button
+                          onClick={downloadQRCode}
+                          className="w-full bg-primary-50 text-primary-700 border border-primary-200 rounded-lg py-2 px-4 text-sm font-medium flex items-center justify-center gap-2"
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                        >
+                          <FaDownload size={16} />
+                          Download Certificate
+                        </motion.button>
+                        
+                        <motion.button
+                          onClick={() => setShowShareOptions(true)}
+                          className="w-full bg-gray-50 text-gray-700 border border-gray-200 rounded-lg py-2 px-4 text-sm font-medium flex items-center justify-center gap-2"
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                        >
+                          <FaShare size={16} />
+                          Share Result
+                        </motion.button>
                       </div>
                     </div>
                   </div>
+                  
+                  <p className="text-xs text-gray-500 mt-2 text-center italic">
+                    This certificate is cryptographically secured and tamper-proof.
+                    Scan the QR code to verify the authenticity of this fact-check.
+                  </p>
                 </motion.div>
                 
                 <MotionButton 
-                  className="w-full text-sm text-primary-600 hover:text-primary-800"
+                  className="w-full text-sm text-primary-600 hover:text-primary-800 py-2 border-t border-gray-100"
                   onClick={() => setShowVerificationProof(false)}
                   whileHover="hover"
                   whileTap="tap"
@@ -587,7 +728,7 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
               </MotionButton>
               <MotionButton 
                 className="text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1.5 transition-colors"
-                onClick={() => setShowVerificationProof(!showVerificationProof)}
+                onClick={openShareCertificate}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
               >
@@ -696,6 +837,50 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
           />
         )}
       </AnimatePresence>
+
+      {/* QR Code Modal */}
+      <Modal
+        isOpen={showQRModal}
+        onClose={() => setShowQRModal(false)}
+        title="Verification QR Code"
+        width="max-w-md"
+      >
+        <div className="text-center">
+          <div ref={qrRef} className="flex justify-center mb-4">
+            <QRCode 
+              value={generateShareableLink()} 
+              size={200}
+              level="H" 
+              includeMargin={true}
+              renderAs="canvas"
+              imageSettings={{
+                src: '/logo192.png',
+                height: 40,
+                width: 40,
+                excavate: true,
+              }}
+            />
+          </div>
+          <p className="text-sm text-gray-600 mb-4">
+            Scan this QR code to access this fact-check verification result directly. 
+            The verification is timestamped and cannot be altered.
+          </p>
+          <div className="flex justify-center space-x-3">
+            <button
+              onClick={downloadQRCode}
+              className="px-4 py-2 bg-primary-600 text-white rounded-md flex items-center justify-center hover:bg-primary-700 transition-colors"
+            >
+              <FaDownload className="mr-2" /> Download QR
+            </button>
+            <button
+              onClick={() => setShowQRModal(false)}
+              className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

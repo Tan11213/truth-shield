@@ -1,0 +1,79 @@
+/* 
+ * Styles for FactCheckResult component 
+ */
+
+/* Explanation content formatting */
+.explanation-content {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: #333;
+}
+
+.explanation-content h1,
+.explanation-content h2,
+.explanation-content h3 {
+  margin-top: 1.25rem;
+  margin-bottom: 0.75rem;
+  color: #1f2937;
+}
+
+.explanation-content h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 0.5rem;
+}
+
+.explanation-content strong {
+  font-weight: 600;
+  color: #111;
+}
+
+.explanation-content br {
+  display: block;
+  margin-bottom: 0.5rem;
+  content: " ";
+}
+
+/* Ensure paragraphs have proper spacing */
+.explanation-content p {
+  margin-bottom: 0.75rem;
+}
+
+/* Style verdict colors */
+.explanation-content .text-true-600 {
+  color: #059669;
+}
+
+.explanation-content .text-false-600 {
+  color: #dc2626;
+}
+
+.explanation-content .text-partial-600 {
+  color: #d97706;
+}
+
+/* Format claim headings */
+.explanation-content .font-semibold {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.explanation-content .mt-3 {
+  margin-top: 0.75rem;
+}
+
+.explanation-content .mb-2 {
+  margin-bottom: 0.5rem;
+}
+
+/* Style source links */
+.explanation-content a {
+  color: #4338ca;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.explanation-content a:hover {
+  text-decoration: underline;
+} 

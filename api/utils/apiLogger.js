@@ -7,7 +7,7 @@ const logRequest = (req, serviceName) => {
   const timestamp = new Date().toISOString();
   const method = req.method || 'UNKNOWN';
   const url = req.url || 'UNKNOWN';
-  const body = req.body ? JSON.stringify(req.body).substring(0, 200) : 'EMPTY';
+  const body = req.body ? JSON.stringify(req.body) : 'EMPTY';
   const headers = req.headers ? JSON.stringify(req.headers) : 'NONE';
   
   console.log(`
@@ -27,7 +27,7 @@ const logExternalAPICall = (service, endpoint, payload) => {
 ========== EXTERNAL API CALL ==========
 Service: ${service}
 Endpoint: ${endpoint}
-Payload: ${typeof payload === 'object' ? JSON.stringify(payload).substring(0, 300) : payload}
+Payload: ${typeof payload === 'object' ? JSON.stringify(payload) : payload}
 =======================================
   `);
 };
@@ -38,7 +38,7 @@ const logExternalAPIResponse = (service, status, responseData) => {
 ========== EXTERNAL API RESPONSE ==========
 Service: ${service}
 Status: ${status}
-Response: ${typeof responseData === 'object' ? JSON.stringify(responseData).substring(0, 300) : responseData}
+Response: ${typeof responseData === 'object' ? JSON.stringify(responseData) : responseData}
 ==========================================
   `);
 };
@@ -52,7 +52,7 @@ const logResponse = (timestamp, serviceName, status, responseData) => {
 Request time: ${timestamp}
 Response time: ${endTimestamp}
 Status: ${status}
-Response: ${typeof responseData === 'object' ? JSON.stringify(responseData).substring(0, 300) : responseData}
+Response: ${typeof responseData === 'object' ? JSON.stringify(responseData) : responseData}
 ===============================================
   `);
 };

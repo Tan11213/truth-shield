@@ -89,7 +89,7 @@ export async function verifyFactsWithPerplexity(claim: string): Promise<FactChec
     if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
       toast.error('Network error: Could not connect to the backend service');
       throw new Error('Network error: Could not connect to the verification service. Check your internet connection.');
-    } 
+      }
     
     // Generic error
     toast.error(`Failed to verify claim: ${error instanceof Error ? error.message : 'Unknown client-side error'}`);
@@ -133,7 +133,7 @@ export async function analyzeWebContentWithPerplexity(url: string): Promise<Fact
       }
       logger.error('API Error from /api/analyze-web-content:', { status: response.status, data: errorData });
       throw new Error(`Web content analysis failed: ${errorData?.error?.message || response.statusText}`);
-    }
+        }
 
     const result: FactCheckResult = await response.json();
     return result;
@@ -170,7 +170,7 @@ export async function preprocessWithAI(content: string): Promise<{
       }
       logger.error('API Error from /api/preprocess-content:', { status: response.status, data: errorData });
       logger.warn('Backend preprocessing failed, falling back to client-side heuristics.', errorData?.error?.message || response.statusText);
-      return {
+    return {
         claims: extractClaims(content),
         summary: summarizeText(content),
         mainTopics: []

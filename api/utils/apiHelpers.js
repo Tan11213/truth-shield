@@ -74,61 +74,311 @@ const parseFactCheckResponse = (apiResponse) => {
     }
 
     const responseText = apiResponse.choices[0].message.content;
+    console.log('[API Helper] Raw response text:', responseText.substring(0, 300) + '...');
     
-    // Extract verdict
+    // Extract verdict - with improved pattern matching
     let isTrue = false;
     let isPartiallyTrue = false;
-    const verdictSection = responseText.match(/\[VERDICT\](.*?)(?=\[|$)/is);
+    
+    // First try to extract from the formatted verdict section
+    const verdictSectionRegex = /(?:\*\*VERDICT\*\*|\[VERDICT\]|VERDICT:)([\s\S]*?)(?=\*\*|\[|$)/i;
+    const verdictSection = responseText.match(verdictSectionRegex);
     const verdictText = verdictSection ? verdictSection[1].trim() : '';
     
-    if (verdictText.match(/true/i) && verdictText.match(/partially|partly|somewhat|not entirely/i)) {
-      isPartiallyTrue = true;
-    } else if (verdictText.match(/true/i) && !verdictText.match(/not true|false/i)) {
-      isTrue = true;
+    console.log('[API Helper] Extracted verdict text:', verdictText);
+    
+    // Enhanced verdict detection with more patterns
+    if (verdictText) {
+      // Direct verdict text analysis
+      const truePatterns = [
+        /\btrue\b/i,
+        /\baccurate\b/i,
+        /\bcorrect\b/i,
+        /\bverified\b/i
+      ];
+      
+      const falsePatterns = [
+        /\bfalse\b/i,
+        /\binaccurate\b/i,
+        /\bincorrect\b/i,
+        /\bmisleading\b/i
+      ];
+      
+      const partialPatterns = [
+        /\bpartially true\b/i,
+        /\bpartly true\b/i,
+        /\bmostly true\b/i,
+        /\bsomewhat true\b/i,
+        /\bmixed\b/i
+      ];
+      
+      // Check for negative qualifiers
+      const hasNegativeQualifier = 
+        verdictText.match(/\bnot\s+true\b/i) || 
+        verdictText.match(/\bunclear\b/i) ||
+        verdictText.match(/\bcannot\s+verify\b/i);
+      
+      // Check if any true patterns matched and no false patterns matched
+      const hasTrue = truePatterns.some(pattern => pattern.test(verdictText)) && !hasNegativeQualifier;
+      const hasFalse = falsePatterns.some(pattern => pattern.test(verdictText));
+      const hasPartial = partialPatterns.some(pattern => pattern.test(verdictText));
+      
+      // Check for "overall" in combination with verdict
+      const hasOverallTrue = verdictText.match(/overall.*?true/i) || 
+                             verdictText.match(/true.*?overall/i) ||
+                             responseText.match(/overall.*?true/i);
+                             
+      if (hasOverallTrue && !hasFalse && !hasPartial) {
+        isTrue = true;
+      } else if (hasPartial) {
+        isPartiallyTrue = true;
+      } else if (hasTrue && !hasFalse && !hasPartial) {
+        isTrue = true;
+      }
     }
+    
+    // Check the entire response for verdict patterns if not found in verdict section
+    if (!isTrue && !isPartiallyTrue) {
+      // Search for overall verdict statements in the full text
+      const overallTruePatterns = [
+        /overall.*?true/i,
+        /verdict.*?true/i,
+        /claim.*?true/i,
+        /claim.*?accurate/i,
+        /claim.*?correct/i,
+        /conclusion.*?true/i
+      ];
+      
+      const overallPartiallyPatterns = [
+        /overall.*?partially\s+true/i,
+        /verdict.*?partially\s+true/i,
+        /claim.*?partially\s+true/i,
+        /claim.*?somewhat\s+true/i
+      ];
+      
+      if (overallTruePatterns.some(pattern => pattern.test(responseText)) && 
+          !responseText.match(/overall.*?false/i) &&
+          !responseText.match(/not\s+true/i)) {
+        isTrue = true;
+      } else if (overallPartiallyPatterns.some(pattern => pattern.test(responseText))) {
+        isPartiallyTrue = true;
+      }
+    }
+    
+    console.log('[API Helper] Verdict determination:', { isTrue, isPartiallyTrue });
 
     // Extract explanation
-    const explanationSection = responseText.match(/\[EXPLANATION\](.*?)(?=\[|$)/is);
-    const explanation = explanationSection 
-      ? explanationSection[1].trim()
-      : "No detailed explanation provided.";
+    let explanation = "";
+    
+    // Get the full formatted verdict + explanation rather than just the explanation part
+    if (responseText.includes("**VERDICT**") || responseText.includes("[VERDICT]") || responseText.includes("VERDICT:")) {
+      // First attempt to extract just the explanation part
+      const explanationSection = responseText.match(/(?:\*\*EXPLANATION\*\*|\[EXPLANATION\]|EXPLANATION:)([\s\S]*?)(?=\*\*SOURCES\*\*|\[SOURCES\]|SOURCES:|$)/i);
+      if (explanationSection && explanationSection[1].trim().length > 20) {
+        explanation = explanationSection[1].trim();
+      } else {
+        // Fall back to the full response text to ensure we have content
+        explanation = responseText;
+      }
+    } else {
+      // If no formal sections, use the whole response
+      explanation = responseText;
+    }
+    
+    // Make sure explanation is not empty or too short
+    if (!explanation || explanation.trim().length < 20) {
+      explanation = responseText;
+    }
+    
+    console.log('[API Helper] Extracted explanation length:', explanation.length);
 
-    // Extract sources
-    const sourcesSection = responseText.match(/\[SOURCES\](.*?)(?=\[|$)/is);
+    // Enhanced source extraction
+    let sources = [];
+    
+    // If there's a sources section in the text, extract it
+    const sourceSectionRegex = /(?:\*\*SOURCES\*\*|\[SOURCES\]|SOURCES:)([\s\S]*?)(?=\*\*|\[|$)/i;
+    const sourcesSection = responseText.match(sourceSectionRegex);
     const sourcesText = sourcesSection ? sourcesSection[1].trim() : '';
     
-    // Parse numbered sources
-    const sources = [];
-    const sourceMatches = sourcesText.match(/\d+\.\s+.+?(?=\d+\.|$)/gs) || [];
-    
-    for (const sourceMatch of sourceMatches) {
-      // Try to extract title and URL
-      const urlMatch = sourceMatch.match(/https?:\/\/[^\s)]+/);
-      const url = urlMatch ? urlMatch[0] : '';
+    // Process citations array if available
+    if (apiResponse.citations && Array.isArray(apiResponse.citations) && apiResponse.citations.length > 0) {
+      console.log('[API Helper] Found citations array with', apiResponse.citations.length, 'entries');
       
-      // Remove the number and URL to get title
-      let title = sourceMatch
-        .replace(/^\d+\.\s+/, '') // Remove number prefix
-        .replace(url, '') // Remove URL
-        .replace(/[-–—]\s*$/, '') // Remove trailing dash
-        .replace(/\s+/g, ' ') // Normalize whitespace
-        .trim();
+      // Look for numbered references in the explanation text
+      const referenceMatches = explanation.match(/\[(\d+)\]/g) || [];
+      const references = referenceMatches.map(ref => parseInt(ref.replace(/[\[\]]/g, '')));
       
-      // If no URL in the source, check if the whole thing is a title
-      if (!url && title) {
-        sources.push({ title, url: '' });
-        continue;
+      // Create a map of reference numbers to URLs
+      const referenceMap = {};
+      
+      // First map numbers to URLs from the citation array
+      apiResponse.citations.forEach((url, index) => {
+        referenceMap[index + 1] = url;
+      });
+      
+      // Extract source lines from the sources section
+      const sourceLines = sourcesText.split('\n').filter(line => line.trim().length > 0);
+      
+      // Process source lines to extract reference numbers and descriptions
+      sourceLines.forEach(line => {
+        // Try to match different formats of source references
+        const formatPatterns = [
+          /(?:\d+\.\s*)?\[(\d+)\](?:\s*-\s*)(.*)/,  // [1] - Description or 1. [1] - Description
+          /(\d+)\.\s+\[.*?\](.*)/,                  // 1. [Title] Description
+          /(\d+)\.\s+(.*)/                          // 1. Description
+        ];
+        
+        let refNumber = null;
+        let description = null;
+        let url = null;
+        
+        // Try each pattern
+        for (const pattern of formatPatterns) {
+          const match = line.match(pattern);
+          if (match) {
+            refNumber = parseInt(match[1]);
+            description = match[2]?.trim() || '';
+            url = referenceMap[refNumber];
+            break;
+          }
+        }
+        
+        // If no pattern matched but line contains a URL, extract it
+        if (!url) {
+          const urlMatch = line.match(/https?:\/\/[^\s)]+/);
+          if (urlMatch) {
+            url = urlMatch[0];
+            // Try to extract reference number
+            const refMatch = line.match(/\[(\d+)\]/) || line.match(/^(\d+)\./);
+            if (refMatch) {
+              refNumber = parseInt(refMatch[1]);
+            }
+            description = line.replace(url, '').replace(/^\s*\[?(\d+)\]?\.?\s*/, '').trim();
+          }
+        }
+        
+        if (refNumber !== null) {
+          // Update the reference map with any URLs found in the source lines
+          if (url && !referenceMap[refNumber]) {
+            referenceMap[refNumber] = url;
+          }
+          
+          // Add to sources with the URL from the reference map or the one found directly
+          sources.push({
+            title: description || `Source ${refNumber}`,
+            url: url || referenceMap[refNumber] || '',
+            refNumber
+          });
+        } else if (url) {
+          // If we found a URL but no reference number
+          const domainMatch = url.match(/https?:\/\/(?:www\.)?([^\/]+)/);
+          const domain = domainMatch ? domainMatch[1] : 'Source';
+          sources.push({
+            title: description || domain,
+            url
+          });
+        } else if (line.trim().length > 5) {
+          // Just use the line as a source with no URL
+          sources.push({
+            title: line.trim(),
+            url: '',
+            refNumber: index + 1
+          });
+        }
+      });
+      
+      // If no sources were extracted from the source section but we have citations
+      if (sources.length === 0) {
+        // Use the citations array directly
+        apiResponse.citations.forEach((url, index) => {
+          const domainMatch = url.match(/https?:\/\/(?:www\.)?([^\/]+)/);
+          const domain = domainMatch ? domainMatch[1] : 'Source';
+          sources.push({
+            title: `Source ${index + 1}: ${domain}`,
+            url,
+            refNumber: index + 1
+          });
+        });
       }
       
-      // If no title extracted or it's just punctuation, use a generic title
-      if (!title || /^[.,;:\s]*$/.test(title)) {
-        const urlParts = url.split('/');
-        title = urlParts[2] || 'Reference';
-      }
+      // Ensure sources are unique by URL
+      const uniqueSources = [];
+      const urlSet = new Set();
       
-      sources.push({ title, url });
+      sources.forEach(source => {
+        if (source.url && !urlSet.has(source.url)) {
+          urlSet.add(source.url);
+          uniqueSources.push(source);
+        } else if (!source.url) {
+          uniqueSources.push(source);
+        }
+      });
+      
+      sources = uniqueSources;
+    } else {
+      // No citations array - extract sources from text only
+      console.log('[API Helper] No citations array found, extracting sources from text');
+      
+      if (sourcesText) {
+        const sourceLines = sourcesText.split('\n').filter(line => line.trim().length > 0);
+        
+        sourceLines.forEach((line, index) => {
+          const urlMatch = line.match(/https?:\/\/[^\s)]+/);
+          const refMatch = line.match(/\[?(\d+)\]?\.?\s*(.*)/);
+          
+          if (urlMatch) {
+            // Source has URL directly in the text
+            const url = urlMatch[0];
+            const title = line.replace(url, '').replace(/^\s*\[?(\d+)\]?\.?\s*/, '').trim() || 
+                          `Source ${index + 1}`;
+            
+            sources.push({
+              title,
+              url,
+              refNumber: refMatch ? parseInt(refMatch[1]) : index + 1
+            });
+          } else if (refMatch) {
+            // Source has a reference number but no URL
+            const refNumber = refMatch[1];
+            const description = refMatch[2].trim() || `Source ${refNumber}`;
+            
+            sources.push({
+              title: `[${refNumber}] ${description}`,
+              url: '',
+              refNumber: parseInt(refNumber)
+            });
+          } else if (line.trim().length > 5) {
+            // Just use the line text
+            sources.push({
+              title: line.trim(),
+              url: '',
+              refNumber: index + 1
+            });
+          }
+        });
+      }
     }
-
+    
+    // Sort sources by reference number if available
+    sources.sort((a, b) => {
+      if (a.refNumber && b.refNumber) {
+        return a.refNumber - b.refNumber;
+      }
+      return 0;
+    });
+    
+    console.log('[API Helper] Extracted', sources.length, 'sources');
+    
+    // Clean and simplify explanation format
+    let cleanExplanation = explanation;
+    
+    // Add proper line breaks and remove excessive formatting
+    cleanExplanation = cleanExplanation
+      .replace(/\n\s*\n/g, '\n') // Remove multiple empty lines
+      .replace(/\*\*/g, '') // Remove markdown ** formatting
+      .replace(/^#+\s+/gm, '') // Remove markdown headers
+      .trim();
+    
     // Additional analysis: Check for propaganda indicators
     const propagandaIndicators = [];
     const propagandaTerms = [
@@ -151,7 +401,7 @@ const parseFactCheckResponse = (apiResponse) => {
     const sourceURLs = sources.map(s => s.url);
     
     for (const domain of internationalDomains) {
-      if (sourceURLs.some(url => url.includes(domain))) {
+      if (sourceURLs.some(url => url && url.includes(domain))) {
         hasInternationalSources = true;
         break;
       }
@@ -160,7 +410,7 @@ const parseFactCheckResponse = (apiResponse) => {
     return {
       isTrue,
       isPartiallyTrue,
-      explanation,
+      explanation: cleanExplanation,
       sources,
       propagandaIndicators: propagandaIndicators.length > 0 ? propagandaIndicators : undefined,
       sourceBalance: {

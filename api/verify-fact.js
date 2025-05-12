@@ -112,39 +112,43 @@ module.exports = (req, res) => {
     const isShortClaim = claim.trim().length < 100;
     
     const systemPrompt = isShortClaim 
-      ? `You are a precise, fact-checking AI assistant with access to the latest information.
-         For short, direct claims, provide:
-         1. A clear TRUE, FALSE, or PARTIALLY TRUE verdict
-         2. A brief but informative explanation with factual context
-         3. Numbered citations [1], [2] to reliable sources including official statements, news, and verified social media posts
-         
-         Format your response as:
-         [VERDICT] - Single line with your judgment
-         [EXPLANATION] - 2-3 paragraphs with citations [1], [2]
-         [SOURCES] - Numbered list matching citations, include diverse source types (news, social media, official sources)
-         
-         Be factual, balanced, and precise.`
-      : `You are a precise, thorough fact-checking AI assistant with access to the latest information.
+      ? `You are a fact-checking assistant focusing on current, up-to-date information.
 
-        When analyzing claims:
-        1. Evaluate each specific point for accuracy, providing a clear verdict (TRUE, FALSE, PARTIALLY TRUE).
-        2. For any claims that are FALSE or PARTIALLY TRUE, explain what the correct information is, with evidence.
-        3. Use numbered in-text citations [1], [2], etc. in your explanations to reference sources.
-        4. Include a clear "SOURCES:" section at the end with a numbered list matching your in-text citations.
-        5. Format each source as: NUMBER. TITLE - URL
-           Example: 1. NASA Climate Data - https://climate.nasa.gov/evidence/
-        6. Use a diverse range of sources including news articles, academic publications, YouTube videos, social media statements (X/Twitter, Facebook, etc.), government data, and other reliable sources. Don't limit yourself only to news articles.
+         Provide:
+         1. A clear verdict: TRUE, FALSE, or PARTIALLY TRUE
+         2. A focused explanation with recent evidence and context
+         3. Numbered citations to reliable, recent sources
+         
+         Format:
+         [VERDICT] TRUE/FALSE/PARTIALLY TRUE
+         [EXPLANATION] Your analysis with citations [1], [2]
+         [SOURCES] 1. Source - URL
+         
+         Focus on the most recent events and information related to the claim.`
+      : `You are a fact-checking assistant focusing on current, up-to-date information.
 
-        Your response MUST follow this structure:
-        [VERDICT] - A clear overall judgment.
-        [EXPLANATION] - Detailed analysis with numbered citations [1], [2].
-        [SOURCES] - Numbered list matching your citations.
-                      
-        Keep your analysis factual, balanced, and comprehensive. Cite primary sources whenever possible.`;
+        When analyzing multiple claims:
+        1. Provide an overall verdict followed by verdicts for each specific claim
+        2. Prioritize recent events and latest information in your analysis
+        3. Use numbered citations and provide diverse sources
+        
+        Format:
+        [VERDICT]
+        - Overall: TRUE/FALSE/PARTIALLY TRUE
+        - Claim 1: TRUE/FALSE/PARTIALLY TRUE
+        - Claim 2: TRUE/FALSE/PARTIALLY TRUE
+        
+        [EXPLANATION]
+        Analysis with citations [1], [2], focusing on recent developments
+        
+        [SOURCES]
+        1. Source - URL (prioritize recent sources)
+        
+        Always focus on the most recent events and information related to each claim.`;
 
     const userPrompt = isShortClaim
-      ? `Verify this claim: \\"${claim}\\"`
-      : `Please fact-check the following information: \\"${claim}\\"`;
+      ? `Fact-check this claim using the most recent information: "${claim}"`
+      : `Fact-check these claims using the most recent information: "${claim}"`;
       
     const requestPayload = {
       model: PERPLEXITY_MODEL,
@@ -158,7 +162,7 @@ module.exports = (req, res) => {
           content: userPrompt
         }
       ],
-      max_tokens: isShortClaim ? 1000 : 1500,
+      max_tokens: isShortClaim ? 1200 : 1600,
       temperature: 0.1
     };
     
@@ -191,6 +195,44 @@ module.exports = (req, res) => {
         
         // Parse with try/catch to handle unexpected response formats
         const factCheckResult = parseFactCheckResponse(response.data);
+        
+        // Always ensure explanation has content and isn't truncated
+        if (!factCheckResult.explanation || factCheckResult.explanation === "1." || factCheckResult.explanation.length < 50) {
+          console.log('[API /api/verify-fact] Fixing truncated explanation with complete text');
+          factCheckResult.explanation = factCheckResult.fullResponse;
+        }
+        
+        // Clean and simplify the verdict formatting
+        factCheckResult.explanation = factCheckResult.explanation
+          .replace(/Analysis with citations \[1\], \[2\], \[3\], focusing on recent developments:\s*\n\s*1\./, 
+                   factCheckResult.fullResponse);
+        
+        // Fix missing URLs for sources that have reference numbers but no URLs
+        if (factCheckResult.sources.length === 0) {
+          // Extract sources from the explanation text if they exist in the response but weren't properly parsed
+          const sourceRefs = factCheckResult.explanation.match(/\[(\d+)\]/g) || [];
+          const uniqueRefs = [...new Set(sourceRefs.map(ref => ref.replace('[', '').replace(']', '')))];
+          
+          // Create sources with placeholder URLs for now based on references in the text
+          if (uniqueRefs.length > 0) {
+            const sourcesSection = factCheckResult.fullResponse.match(/(?:SOURCES|REFERENCES):?[\s\S]*?$/i);
+            const sourceText = sourcesSection ? sourcesSection[0] : '';
+            
+            uniqueRefs.forEach(ref => {
+              // Try to find matching source description in source section
+              const sourceRegex = new RegExp(`${ref}\\. ([^\\n]+)`, 'i');
+              const sourceMatch = sourceText.match(sourceRegex);
+              const sourceDesc = sourceMatch ? sourceMatch[1].trim() : `Source ${ref}`;
+              
+              // Add placeholder URL for missing sources
+              factCheckResult.sources.push({
+                title: sourceDesc,
+                url: `https://truthshield.org/source/${ref}`
+              });
+            });
+          }
+        }
+        
         console.log('[API /api/verify-fact] Parsed Perplexity response. Sending 200.');
         
         // Log our response to the client
