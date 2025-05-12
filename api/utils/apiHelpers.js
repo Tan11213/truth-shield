@@ -169,6 +169,19 @@ const parseFactCheckResponse = (apiResponse) => {
 
     // Extract explanation
     let explanation = "";
+    let summary = "";
+    
+    // Try to extract summary section first
+    const summarySection = responseText.match(/(?:\*\*SUMMARY\*\*|\[SUMMARY\]|SUMMARY:)([\s\S]*?)(?=\*\*|\[|$)/i);
+    if (summarySection && summarySection[1].trim().length > 10) {
+      summary = summarySection[1].trim();
+    } else {
+      // If no explicit summary, try to create one from the first few sentences of the explanation
+      const firstParagraph = responseText.split(/\n\n/)[0];
+      if (firstParagraph && firstParagraph.length > 30 && firstParagraph.length < 500) {
+        summary = firstParagraph.replace(/\*\*VERDICT\*\*|\[VERDICT\]|VERDICT:/gi, "").trim();
+      }
+    }
     
     // Get the full formatted verdict + explanation rather than just the explanation part
     if (responseText.includes("**VERDICT**") || responseText.includes("[VERDICT]") || responseText.includes("VERDICT:")) {
@@ -200,17 +213,52 @@ const parseFactCheckResponse = (apiResponse) => {
     // Add proper line breaks and remove excessive formatting
     cleanExplanation = cleanExplanation
       .replace(/\n\s*\n/g, '\n') // Remove multiple empty lines
-      .replace(/\*\*/g, '') // Remove markdown ** formatting
+      .replace(/\*\*/g, '') // Remove markdown ** formatting except for claim numbers
       .replace(/^#+\s+/gm, '') // Remove markdown headers
       .trim();
     
-    // DO NOT remove reference numbers - we'll keep them for linking
-    // Only clean up extra spaces
+    // Properly format claim numbers to be bold
+    // First, temporarily replace reference numbers like [1] to prevent conflicts
+    const referenceNumbers = [];
+    cleanExplanation = cleanExplanation.replace(/\[(\d+)\]/g, (match, number) => {
+      const placeholder = `__REF_${number}__`;
+      referenceNumbers.push({ placeholder, original: match });
+      return placeholder;
+    });
+    
+    // Now apply bold formatting to claim numbers and lists
     cleanExplanation = cleanExplanation
-      .replace(/\s{2,}/g, ' ') // Replace multiple spaces with a single space
+      .replace(/\b(claim\s*\d+|point\s*\d+):/gi, '**$1:**') // Bold "Claim X:" or "Point X:"
+      .replace(/\b(\d+)\.\s+/g, '**$1.** ') // Bold numbered list items like "1. ", "2. "
+      .replace(/\s{2,}/g, ' '); // Replace multiple spaces with a single space
+    
+    // Put back the reference numbers
+    referenceNumbers.forEach(ref => {
+      cleanExplanation = cleanExplanation.replace(ref.placeholder, ref.original);
+    });
+    
+    // Final trim
+    cleanExplanation = cleanExplanation.trim();
+    
+    // Clean and format the summary too
+    let cleanSummary = summary
+      .replace(/\*\*/g, '')
+      .replace(/^#+\s+/gm, '')
+      .replace(/\s{2,}/g, ' ')
       .trim();
       
+    if (cleanSummary.length < 20 || cleanSummary.length > 500) {
+      // If summary is too short or too long, generate a new one from the first part of explanation
+      const sentences = cleanExplanation.split(/(?<=[.!?])\s+/);
+      if (sentences.length > 1) {
+        cleanSummary = sentences.slice(0, Math.min(2, sentences.length)).join(' ');
+      } else {
+        cleanSummary = cleanExplanation.substring(0, Math.min(300, cleanExplanation.length));
+      }
+    }
+      
     console.log('[API Helper] Extracted explanation length:', cleanExplanation.length);
+    console.log('[API Helper] Extracted summary length:', cleanSummary.length);
 
     // Enhanced source extraction
     let sources = [];
@@ -432,6 +480,7 @@ const parseFactCheckResponse = (apiResponse) => {
     return {
       isTrue,
       isPartiallyTrue,
+      summary: cleanSummary,
       explanation: cleanExplanation,
       sources,
       sourceRefs,
