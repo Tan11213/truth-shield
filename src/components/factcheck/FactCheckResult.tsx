@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FactCheckResponse } from '../../utils/factCheck';
 import { 
@@ -261,6 +261,7 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
   const [isExplanationExpanded, setIsExplanationExpanded] = useState(false);
   
   const qrRef = useRef<HTMLDivElement>(null);
+  const resultRef = useRef<HTMLDivElement>(null);
   
   // Function to toggle explanation expansion
   const toggleExplanation = () => {
@@ -455,16 +456,27 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
     setShowReportForm(true);
   };
 
-  // Log that the result was viewed
-  React.useEffect(() => {
+  // Log that the result was viewed and scroll to result on mobile
+  useEffect(() => {
     logger.info('Fact check result viewed', { 
       resultId: result.id,
       verdict: result.verdict
     });
+    
+    // Auto-scroll to the result component on mobile devices
+    if (resultRef.current && window.innerWidth <= 768) {
+      // Use a small timeout to ensure the component is fully rendered
+      setTimeout(() => {
+        resultRef.current?.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'start'
+        });
+      }, 300);
+    }
   }, [result.id, result.verdict]);
 
   return (
-    <div className="w-full max-w-3xl mx-auto">
+    <div className="w-full max-w-3xl mx-auto" ref={resultRef}>
       <MotionDiv 
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
