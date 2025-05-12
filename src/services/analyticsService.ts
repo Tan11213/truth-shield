@@ -39,9 +39,9 @@ export const trackFactCheck = async (data: Omit<MisinformationData, 'timestamp'>
  */
 export const getTrendingMisinformation = async (): Promise<{category: string, count: number}[]> => {
   logger.debug('Returning mock trending data');
-  
+    
   // Always return mock data
-  return getMockTrendingData();
+    return getMockTrendingData();
 };
 
 /**

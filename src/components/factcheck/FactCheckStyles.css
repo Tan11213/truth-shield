@@ -76,4 +76,75 @@
 
 .explanation-content a:hover {
   text-decoration: underline;
+}
+
+/* Fix for markdown style double asterisk formatting in API response */
+.explanation-content span.claim-label {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+/* Fix for verdict rendering */
+.verdict-section {
+  margin-bottom: 1rem;
+}
+
+.verdict-section .verdict-label {
+  font-weight: 600;
+  margin-right: 0.5rem;
+}
+
+.verdict-section .verdict-value {
+  font-weight: 600;
+}
+
+.verdict-section .verdict-true {
+  color: #059669;
+}
+
+.verdict-section .verdict-false {
+  color: #dc2626;
+}
+
+.verdict-section .verdict-partial {
+  color: #d97706;
+}
+
+/* Styles for claim verdicts in the text */
+.explanation-content .verdict-true {
+  color: #059669;
+  font-weight: 500;
+}
+
+.explanation-content .verdict-false {
+  color: #dc2626;
+  font-weight: 500;
+}
+
+.explanation-content .verdict-partially-true {
+  color: #d97706;
+  font-weight: 500;
+}
+
+.explanation-content .neutral {
+  color: #4b5563;
+  font-weight: 500;
+}
+
+/* Style for numbered claim points */
+.explanation-content .claim-point {
+  margin-bottom: 1rem;
+  padding-left: 0.5rem;
+  border-left: 3px solid #e5e7eb;
+}
+
+.explanation-content .claim-point strong {
+  font-weight: 700;
+  color: #111827;
+  font-size: 1.05rem;
+}
+
+/* Fix for markdown asterisks showing in text */
+.explanation-content p:has(**) {
+  font-weight: normal;
 } 

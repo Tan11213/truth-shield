@@ -111,6 +111,29 @@ const formatExplanation = (text: string, sources: { name: string, url: string }[
   
   let formattedText = text;
   
+  // Fix markdown bold formatting with asterisks (**text**)
+  formattedText = formattedText.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+  // Handle claim formatting specially, creating a bolder more visible format
+  formattedText = formattedText.replace(
+    /\*\*Claim\s+(\d+):\*\*\s*([^\n]+)/gi,
+    '<div class="verdict-section mb-3"><span class="verdict-label">Claim $1:</span> <span class="verdict-value">$2</span></div>'
+  );
+  
+  // Create verdict sections with appropriate styling
+  const verdictPatterns = [
+    { pattern: /\*\*Claim\s+(\d+):\*\*\s*TRUE/gi, class: 'verdict-true' },
+    { pattern: /\*\*Claim\s+(\d+):\*\*\s*FALSE/gi, class: 'verdict-false' },
+    { pattern: /\*\*Claim\s+(\d+):\*\*\s*PARTIALLY TRUE/gi, class: 'verdict-partial' }
+  ];
+  
+  verdictPatterns.forEach(({ pattern, class: className }) => {
+    formattedText = formattedText.replace(
+      pattern,
+      `<div class="verdict-section mb-3"><span class="verdict-label">Claim $1:</span> <span class="verdict-value ${className}">$2</span></div>`
+    );
+  });
+  
   // Create a clear verdict section if needed
   const verdictMatch = formattedText.match(/(?:^|\n)(?:VERDICT|Overall):\s*([^\n]+)/i);
   if (verdictMatch) {
@@ -118,19 +141,25 @@ const formatExplanation = (text: string, sources: { name: string, url: string }[
     let verdictClass = '';
     
     if (verdict.toLowerCase().includes('true') && !verdict.toLowerCase().includes('false')) {
-      verdictClass = 'text-true-600 font-semibold';
+      verdictClass = 'verdict-true';
     } else if (verdict.toLowerCase().includes('false')) {
-      verdictClass = 'text-false-600 font-semibold';
+      verdictClass = 'verdict-false';
     } else if (verdict.toLowerCase().includes('partial')) {
-      verdictClass = 'text-partial-600 font-semibold';
+      verdictClass = 'verdict-partial';
     }
     
     // Replace the verdict line with formatted version
     formattedText = formattedText.replace(
       verdictMatch[0], 
-      `<div class="verdict-summary mb-3"><span class="font-medium">Verdict:</span> <span class="${verdictClass}">${verdict}</span></div>`
+      `<div class="verdict-section mb-3"><span class="verdict-label">Verdict:</span> <span class="verdict-value ${verdictClass}">${verdict}</span></div>`
     );
   }
+  
+  // Fix the "-" bullet point in the verdict display
+  formattedText = formattedText.replace(
+    /(?:^|\n)-\s+Overall:\s*([^\n]+)/gi,
+    '<div class="verdict-section mb-3"><span class="verdict-label">Overall:</span> <span class="verdict-value">$1</span></div>'
+  );
   
   // Format specific claims verdicts
   formattedText = formattedText.replace(
@@ -138,10 +167,44 @@ const formatExplanation = (text: string, sources: { name: string, url: string }[
     '<div class="claim-verdict mb-2"><span class="font-medium">Claim $1:</span> <span class="$2-color">$2</span></div>'
   );
   
-  // Make claim numbers and sections stand out
+  // Make numbered claim points stand out with bold formatting
+  formattedText = formattedText.replace(
+    /(?:^|\n)(\d+)\.\s+(.*?)(?::\s*-\s*)(This claim is (true|false|partially true)[^\.]+)/gi,
+    (match, num, claimText, verdict, verdictType) => {
+      // Normalize the verdict type for CSS class
+      const normalizedVerdictType = verdictType.toLowerCase().replace(/\s+/g, '-');
+      return `<p class="claim-point mb-3"><strong>${num}. ${claimText}</strong>: - <span class="verdict-${normalizedVerdictType}">${verdict}</span></p>`;
+    }
+  );
+  
+  // Handle alternative claim format (without "This claim is...")
+  formattedText = formattedText.replace(
+    /(?:^|\n)(\d+)\.\s+(.*?)(?::\s*-\s*)([^\.]+(?:true|false).*?\.)/gi,
+    (match, num, claimText, verdict) => {
+      // Determine verdict type from the text
+      let verdictClass = 'neutral';
+      if (verdict.toLowerCase().includes('true') && !verdict.toLowerCase().includes('false')) {
+        verdictClass = 'verdict-true';
+      } else if (verdict.toLowerCase().includes('false')) {
+        verdictClass = 'verdict-false';
+      } else if (verdict.toLowerCase().includes('partial')) {
+        verdictClass = 'verdict-partially-true';
+      }
+      
+      return `<p class="claim-point mb-3"><strong>${num}. ${claimText}</strong>: - <span class="${verdictClass}">${verdict}</span></p>`;
+    }
+  );
+  
+  // Make claim numbers and sections stand out (for other numbered points)
   formattedText = formattedText.replace(
     /(?:^|\n)(\d+)\.\s+((?:[^\n])+)/g, 
     '<p class="claim-point mb-2"><strong>$1.</strong> $2</p>'
+  );
+  
+  // Handle special format for "1.**" style numbering 
+  formattedText = formattedText.replace(
+    /(\*\*\d+\.\*\*)\s+(.+?)(?=\*\*\d+\.\*\*|$)/g,
+    '<p class="claim-point mb-2">$1 $2</p>'
   );
   
   // Format paragraphs properly
@@ -175,7 +238,7 @@ const formatExplanation = (text: string, sources: { name: string, url: string }[
   });
   
   // Wrap in a paragraph if needed
-  if (!formattedText.startsWith('<p')) {
+  if (!formattedText.startsWith('<p') && !formattedText.startsWith('<div')) {
     formattedText = `<p class="mb-2">${formattedText}</p>`;
   }
   
@@ -376,7 +439,7 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
       [name]: value
     }));
   };
-  
+
   // Log that the result was viewed
   React.useEffect(() => {
     logger.info('Fact check result viewed', { 
@@ -508,30 +571,30 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
                   const cleanTitle = source.name.replace(/^\[(\d+)\]\s*-?\s*/, '').trim();
                   
                   return (
-                    <motion.li 
-                      key={index} 
-                      className="ml-1 py-1"
-                      whileHover="hover"
-                      variants={sourceItemVariants}
-                    >
+                  <motion.li 
+                    key={index} 
+                    className="ml-1 py-1"
+                    whileHover="hover"
+                    variants={sourceItemVariants}
+                  >
                       {source.url ? (
-                        <a 
-                          href={source.url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-primary-600 hover:underline text-sm hover:text-primary-800 transition-colors duration-200"
-                        >
+                    <a 
+                      href={source.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-primary-600 hover:underline text-sm hover:text-primary-800 transition-colors duration-200"
+                    >
                           <span className="font-medium">[{refNumber}]</span> {cleanTitle}
                           <span className="block text-xs text-gray-500 ml-4 mt-1 truncate">
                             {source.url.substring(0, 60)}{source.url.length > 60 ? '...' : ''}
                           </span>
-                        </a>
+                    </a>
                       ) : (
                         <span className="text-sm text-gray-700">
                           <span className="font-medium">[{refNumber}]</span> {cleanTitle}
                         </span>
                       )}
-                    </motion.li>
+                  </motion.li>
                   );
                 })}
               </ol>
@@ -577,7 +640,7 @@ const FactCheckResult: React.FC<FactCheckResultProps> = ({ result, onCheckAnothe
           {/* Verification Certificate */}
           <AnimatePresence>
             {showVerificationProof && (
-              <MotionDiv 
+              <MotionDiv
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
